@@ -63,6 +63,8 @@ import ProfileCard from "./components/ProfileCard";
 import ExplanationPanel from "./components/ExplanationPanel";
 import ReportActions from "./components/ReportActions";
 import DemoGallery from "./components/DemoGallery";
+import EvidenceValue from "./components/EvidenceValue";
+import useRowExplanation from "./useRowExplanation";
 import type { Insight } from "./api";
 
 type View =
@@ -538,6 +540,9 @@ export default function App() {
     }
   });
   const [showHelp, setShowHelp] = useState(false);
+  const { explanation: inspectedExplanation, error: explanationError } =
+    useRowExplanation(job, inspected);
+  const explainPage = view === "data";
   const generation = useRef(0);
   const uploadInput = useRef<HTMLInputElement>(null);
   const refreshDatasets = useCallback(
@@ -567,7 +572,11 @@ export default function App() {
     let active = true;
     const timeout = setTimeout(() => {
       setExploring(true);
-      post<Exploration>(`/analyses/${job}/explore`, config, controller.signal)
+      post<Exploration>(
+        `/analyses/${job}/explore`,
+        { ...config, explain_page: explainPage },
+        controller.signal,
+      )
         .then((result) => {
           if (active) {
             setExploration(result);
@@ -586,7 +595,7 @@ export default function App() {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [job, config]);
+  }, [job, config, explainPage]);
 
   function exploreInsight(insight: Insight) {
     const { view: target, ...settings } = insight.action;
@@ -1906,9 +1915,7 @@ export default function App() {
                             <thead>
                               <tr>
                                 <th>Zeile</th>
-                                {analysis.features.slice(0, 2).map((name) => (
-                                  <th key={name}>{name}</th>
-                                ))}
+                                <th>Auffällige Werte</th>
                                 <th>Warum auffällig?</th>
                                 <th>Score</th>
                                 <th />
@@ -1925,11 +1932,43 @@ export default function App() {
                                       #{row.id + 1}
                                     </button>
                                   </td>
-                                  {analysis.features.slice(0, 2).map((name) => (
-                                    <td key={name}>
-                                      {formatValue(row.values[name])}
-                                    </td>
-                                  ))}
+                                  <td className="anomaly-values-cell">
+                                    {row.explanation?.reasons.length ? (
+                                      <div className="anomaly-values">
+                                        {row.explanation.reasons.map(
+                                          (reason) => (
+                                            <div
+                                              className="anomaly-value-item"
+                                              key={reason.feature}
+                                            >
+                                              <strong>
+                                                {reason.feature.replaceAll(
+                                                  "_",
+                                                  " ",
+                                                )}
+                                              </strong>
+                                              <EvidenceValue
+                                                reason={reason}
+                                                onInspect={() =>
+                                                  setInspected(row)
+                                                }
+                                              >
+                                                {formatValue(
+                                                  row.values[reason.feature],
+                                                )}
+                                              </EvidenceValue>
+                                            </div>
+                                          ),
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <span className="combination-label">
+                                        Nur Modellmarkierung
+                                        <br />
+                                        <small>Kein Einzelwert belegt</small>
+                                      </span>
+                                    )}
+                                  </td>
                                   <td className="anomaly-reason-cell">
                                     <p>{row.explanation?.summary}</p>
                                     <button
@@ -1971,9 +2010,11 @@ export default function App() {
                         <CircleHelp size={15} />
                         <span>
                           Der Score ist keine Fehlerwahrscheinlichkeit. Die
-                          Schwelle wird vom Verfahren festgelegt
-                          (contamination=auto). Seltene, korrekte Beispiele
-                          können ebenfalls auffallen.
+                          hervorgehobenen Werte weichen statistisch von ihrer
+                          Vergleichsbasis ab; sie sind keine exakte Erklärung
+                          des Modells. Die Schwelle wird vom Verfahren
+                          festgelegt (contamination=auto). Seltene, korrekte
+                          Beispiele können ebenfalls auffallen.
                         </span>
                       </div>
                     </Card>
@@ -2122,6 +2163,13 @@ export default function App() {
                           Auswahl exportieren
                         </button>
                       </div>
+                      <p className="value-evidence-legend">
+                        <span aria-hidden="true" />
+                        Orange markiert konkrete Wertabweichungen mit
+                        Vergleichsmedian. „Nur Modellmarkierung“ bedeutet:
+                        Modellmarkierung ohne belegten Einzelwert. Werte
+                        anklicken, um Prüfregel und Vergleichsbasis zu sehen.
+                      </p>
                       {exploration.rows.length ? (
                         <div className="table-scroll">
                           <table className="data-table">
@@ -2154,21 +2202,49 @@ export default function App() {
                                   </td>
                                   <td>
                                     {row.anomaly ? (
-                                      <Badge tone="orange">Auffällig</Badge>
+                                      <div className="row-evidence-status">
+                                        <Badge tone="orange">Auffällig</Badge>
+                                        <small>
+                                          {row.explanation
+                                            ? row.explanation.reasons.length
+                                              ? `${row.explanation.reasons.length} Wert${row.explanation.reasons.length === 1 ? "" : "e"} markiert`
+                                              : "Nur Modellmarkierung · kein Einzelwert belegt"
+                                            : "Wertprüfung wird geladen …"}
+                                        </small>
+                                      </div>
                                     ) : (
                                       <span className="normal-status">
                                         Unmarkiert
                                       </span>
                                     )}
                                   </td>
-                                  {Object.keys(analysis.roles).map((name) => (
-                                    <td
-                                      key={name}
-                                      title={String(row.values[name] ?? "")}
-                                    >
-                                      {formatValue(row.values[name])}
-                                    </td>
-                                  ))}
+                                  {Object.keys(analysis.roles).map((name) => {
+                                    const reason =
+                                      row.explanation?.reasons.find(
+                                        (item) => item.feature === name,
+                                      );
+                                    return (
+                                      <td
+                                        key={name}
+                                        data-feature={name}
+                                        className={
+                                          reason ? "evidence-cell" : ""
+                                        }
+                                        title={String(row.values[name] ?? "")}
+                                      >
+                                        {reason ? (
+                                          <EvidenceValue
+                                            reason={reason}
+                                            onInspect={() => setInspected(row)}
+                                          >
+                                            {formatValue(row.values[name])}
+                                          </EvidenceValue>
+                                        ) : (
+                                          formatValue(row.values[name])
+                                        )}
+                                      </td>
+                                    );
+                                  })}
                                 </tr>
                               ))}
                             </tbody>
@@ -2341,21 +2417,39 @@ export default function App() {
           {job && (
             <ExplanationPanel
               key={`${job}-${inspected.id}`}
-              job={job}
               row={inspected}
+              explanation={inspectedExplanation}
+              error={explanationError}
             />
           )}
           <h3>Ursprüngliche Werte</h3>
           <dl>
-            {Object.entries(inspected.values).map(([key, value]) => (
-              <div key={key}>
-                <dt>
-                  {key}
-                  <small>{roleLabels[analysis.roles[key]]}</small>
-                </dt>
-                <dd>{formatValue(value)}</dd>
-              </div>
-            ))}
+            {Object.entries(inspected.values).map(([key, value]) => {
+              const reason = inspectedExplanation?.reasons.find(
+                (item) => item.feature === key,
+              );
+              return (
+                <div
+                  key={key}
+                  data-feature={key}
+                  className={reason ? "inspected-evidence" : ""}
+                >
+                  <dt>
+                    {key}
+                    <small>{roleLabels[analysis.roles[key]]}</small>
+                  </dt>
+                  <dd>
+                    {reason ? (
+                      <EvidenceValue reason={reason}>
+                        {formatValue(value)}
+                      </EvidenceValue>
+                    ) : (
+                      formatValue(value)
+                    )}
+                  </dd>
+                </div>
+              );
+            })}
           </dl>
           <button
             className="button secondary"

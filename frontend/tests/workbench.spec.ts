@@ -1,6 +1,118 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
+test("the actual unusual cell is visible beyond the first features and on later table pages", async ({
+  page,
+}) => {
+  const rows = Array.from(
+    { length: 60 },
+    (_, i) =>
+      `${String(i + 1).padStart(4, "0")},${10 + (i % 5) / 10},${100 + (i % 7) / 10},${0.5 + (i % 3) / 10},${10 + (i % 10)},${i % 10}`,
+  );
+  rows.push("0061,10.2,100.3,0.6,999,");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Eigene Daten erkunden" }).click();
+  await page.getByLabel("Datendatei auswählen").setInputFiles({
+    name: "sensoren.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Record_ID,Signal_A,Signal_B,Signal_C,Letztes_Signal,Fehlender_Wert\n" +
+        rows.join("\n"),
+    ),
+  });
+  await page
+    .getByRole("button", { name: "Analyse starten", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Was deine Daten zeigen" }),
+  ).toBeVisible({ timeout: 30000 });
+  await page
+    .getByRole("button", { name: "Auffälligkeiten", exact: true })
+    .click();
+  const anomaly = page
+    .locator(".table-scroll tbody tr")
+    .filter({ has: page.getByRole("button", { name: "#61", exact: true }) });
+  await expect(anomaly.locator(".anomaly-values-cell")).toContainText(
+    "Letztes Signal",
+  );
+  await expect(anomaly.locator(".evidence-value")).toContainText("999");
+  await expect(anomaly.locator(".evidence-value")).toContainText("Median");
+  await anomaly.locator(".evidence-value").click();
+  await expect(page.locator(".comparison-criterion").first()).toContainText(
+    "Quartilsgrenzen",
+  );
+  await expect(
+    page.locator('.inspected-evidence[data-feature="Letztes_Signal"]'),
+  ).toContainText("999");
+  await expect(
+    page.locator('.inspected-evidence[data-feature="Fehlender_Wert"]'),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Detailansicht schließen" }).click();
+  await page.getByRole("button", { name: "Datentabelle", exact: true }).click();
+  await page.getByRole("button", { name: "Nächste Seite" }).click();
+  const dataRow = page
+    .locator(".data-table tbody tr")
+    .filter({ has: page.getByRole("button", { name: "#61", exact: true }) });
+  await expect(
+    dataRow.locator('.evidence-cell[data-feature="Letztes_Signal"]'),
+  ).toContainText("999");
+  await expect(dataRow.locator(".evidence-cell")).toHaveCount(1);
+  await expect(dataRow.locator('[data-feature="Fehlender_Wert"]')).toHaveText(
+    "–",
+  );
+  await dataRow.locator(".evidence-value").click();
+  await expect(page.locator(".inspector h2")).toHaveText("Zeile #61");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await expect(
+    page.locator('.inspected-evidence[data-feature="Letztes_Signal"]'),
+  ).toContainText("999");
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("button", { name: "Detailansicht schließen" }).click();
+  await page.getByRole("button", { name: "Vorherige Seite" }).click();
+  await page.getByRole("button", { name: "#5", exact: true }).click();
+  await expect(page.locator(".inspector h2")).toHaveText("Zeile #5");
+  await expect(page.locator(".explanation-loading")).toHaveCount(0);
+  await expect(
+    page.locator('.inspected-evidence[data-feature="Letztes_Signal"]'),
+  ).toHaveCount(0);
+});
+
+test("a model flag without sufficient single-value evidence does not highlight a cell", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Eigene Daten erkunden" }).click();
+  await page.getByLabel("Datendatei auswählen").setInputFiles({
+    name: "wenige-werte.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("Signal\n1\n2\n999\n"),
+  });
+  await page
+    .getByRole("button", { name: "Analyse starten", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Was deine Daten zeigen" }),
+  ).toBeVisible({ timeout: 30000 });
+  await page.getByRole("button", { name: "Datentabelle", exact: true }).click();
+  const flagged = page
+    .locator(".data-table tbody tr")
+    .filter({ has: page.getByRole("button", { name: "#3", exact: true }) });
+  await expect(flagged.locator(".row-evidence-status")).toContainText(
+    "Nur Modellmarkierung · kein Einzelwert belegt",
+  );
+  await expect(flagged.locator(".evidence-cell")).toHaveCount(0);
+  await flagged.getByRole("button", { name: "#3", exact: true }).click();
+  await expect(page.locator(".combination-note")).toContainText(
+    "Kein einzelner Wert",
+  );
+  await expect(page.locator(".inspected-evidence")).toHaveCount(0);
+});
+
 test("energy sample supports negative measurements, calendar years, filters and evidence", async ({
   page,
 }) => {

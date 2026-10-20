@@ -18,6 +18,7 @@ Die Datenlandschaft ergänzt Zeitreihen, Tabellen und Diagramme. Erkenntnisse we
 - Analyseparameter, lokaler Start, Docker-Grundlage und Tests.
 - Eigene Insight-Ansicht mit Zahlenbelegen, Methodik, Auswahlbezug und gezieltem Wechsel zur passenden Analyse.
 - Statistische Erklärungen für Auffälligkeiten: globale und lokale Vergleichswerte, Median, Quartile, Mindeststichprobe und Abstandsprüfung.
+- Direkte Kennzeichnung der abweichenden Einzelwerte in Auffälligkeitenliste, Datentabelle und Inspector mit Richtung, Vergleichsmedian und tatsächlich erfüllter Prüfregel. Modellmarkierungen ohne Einzelwertbeleg werden ausdrücklich als reine Modellmarkierungen dargestellt.
 - Semantische Verteilungen: Monatsnamen mit Jahr, Kategorien, diskrete Messwerte und unverzerrte Kennungsdarstellung.
 - Analystenberichte als Markdown und JSON mit Befunden, Erklärungen, Zeilenbezug und Datenfingerabdruck.
 - Professioneller Arbeitsbereich mit klarer visueller Hierarchie und lesbareren Beschriftungen.

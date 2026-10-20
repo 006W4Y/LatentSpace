@@ -47,6 +47,8 @@ export type Comparison = {
   percentile: number;
   deviation: number | null;
   is_evidence: boolean;
+  rule: "iqr" | "distance" | "constant" | null;
+  criterion: string | null;
   other_features: string[];
   title: string;
   detail: string;
@@ -58,6 +60,7 @@ export type RowExplanation = {
   score: number;
   score_percentile: number | null;
   summary: string;
+  assessment: "value_deviation" | "model_only" | "unmarked" | "unavailable";
   reasons: Comparison[];
   comparisons: Comparison[];
   missing_features: string[];

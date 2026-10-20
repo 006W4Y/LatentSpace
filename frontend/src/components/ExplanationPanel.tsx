@@ -1,7 +1,6 @@
-import { useEffect, useState } from "react";
 import { ArrowDownToLine, CircleHelp, LoaderCircle } from "lucide-react";
 import type { Comparison, DataRow, RowExplanation } from "../api";
-import { api, download, number } from "../api";
+import { download, number } from "../api";
 
 function ComparisonCard({ item }: { item: Comparison }) {
   const minimum = Math.min(item.min, item.value),
@@ -54,6 +53,12 @@ function ComparisonCard({ item }: { item: Comparison }) {
         <span>{number(maximum, 2)}</span>
       </div>
       <p>{item.detail}</p>
+      {item.criterion && (
+        <p className="comparison-criterion">
+          <strong>Prüfregel</strong>
+          {item.criterion}
+        </p>
+      )}
       <small>
         {number(item.reference_n, 0)} andere beobachtete Werte
         {item.kind === "context"
@@ -65,30 +70,14 @@ function ComparisonCard({ item }: { item: Comparison }) {
 }
 
 export default function ExplanationPanel({
-  job,
   row,
+  explanation,
+  error,
 }: {
-  job: string;
   row: DataRow;
+  explanation: RowExplanation | null;
+  error: string;
 }) {
-  const [explanation, setExplanation] = useState<RowExplanation | null>(
-    row.explanation ?? null,
-  );
-  const [error, setError] = useState("");
-  useEffect(() => {
-    const controller = new AbortController();
-    setExplanation(row.explanation ?? null);
-    setError("");
-    if (!row.explanation)
-      api<RowExplanation>(`/analyses/${job}/rows/${row.id}/explanation`, {
-        signal: controller.signal,
-      })
-        .then(setExplanation)
-        .catch((error) => {
-          if (error.name !== "AbortError") setError(error.message);
-        });
-    return () => controller.abort();
-  }, [job, row]);
   if (error)
     return (
       <p role="alert" className="error-inline">
@@ -111,6 +100,12 @@ export default function ExplanationPanel({
           : "Wie liegen die Messwerte?"}
       </h3>
       <p className="explanation-summary">{explanation.summary}</p>
+      {explanation.assessment === "model_only" && (
+        <p className="combination-note">
+          Kein einzelner Wert ist durch die Vergleichsregeln als auffällig
+          belegt. Die Markierung betrifft die Zeile im Modell.
+        </p>
+      )}
       {explanation.score_percentile !== null && (
         <div className="score-percentile">
           <span>Score-Perzentil im Gesamtdatensatz</span>

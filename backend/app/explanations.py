@@ -46,6 +46,16 @@ def comparison(feature: str, value: float, values, kind: str, other_features: li
     iqr = stats["q3"] - stats["q1"]
     outside_fence = bool(iqr > 1e-12 and (value < stats["q1"] - 1.5 * iqr or value > stats["q3"] + 1.5 * iqr))
     evidence = (magnitude is not None and magnitude >= 3) or outside_fence or constant_discrepancy
+    rule, criterion = None, None
+    if constant_discrepancy:
+        rule = "constant"
+        criterion = f"Alle {stats['n']} Vergleichswerte liegen bei {format_number(stats['median'])}; dieser Wert weicht davon ab."
+    elif outside_fence:
+        rule = "iqr"
+        criterion = f"Außerhalb der Quartilsgrenzen: unter {format_number(stats['q1'] - 1.5 * iqr)} oder über {format_number(stats['q3'] + 1.5 * iqr)} (1,5 × Quartilsabstand)."
+    elif magnitude is not None and magnitude >= 3:
+        rule = "distance"
+        criterion = f"Abstand zum Vergleichsmedian: {format_number(magnitude)} Vergleichsstreuungen; die Schwelle beträgt 3."
     rank = float(100 * ((observed < value).sum() + .5 * (observed == value).sum()) / len(observed))
     direction = "höher" if delta > 0 else "niedriger" if delta < 0 else "gleich"
     scope = "vergleichbarer Zeilen" if kind == "context" else "der übrigen Zeilen"
@@ -54,6 +64,7 @@ def comparison(feature: str, value: float, values, kind: str, other_features: li
         "median": stats["median"], "q1": stats["q1"], "q3": stats["q3"],
         "min": stats["min"], "max": stats["max"], "reference_n": stats["n"],
         "percentile": rank, "deviation": magnitude, "is_evidence": bool(evidence),
+        "rule": rule, "criterion": criterion,
         "other_features": other_features,
         "title": f"{feature}: {direction} als der Vergleichsmedian" if delta else f"{feature}: am Vergleichsmedian",
         "detail": f"Wert {format_number(value)} gegenüber Median {format_number(stats['median'])} {scope}. Die mittleren 50 % liegen zwischen {format_number(stats['q1'])} und {format_number(stats['q3'])}.",
@@ -111,13 +122,13 @@ def explain_row(result: dict, row_id: int) -> dict:
                     chosen = contextual
             reasons.append(chosen)
     reasons.sort(key=lambda item: (item["is_evidence"], item["deviation"] or 0), reverse=True)
-    evidence = [item for item in reasons if item["is_evidence"]][:3]
+    evidence = [item for item in reasons if item["is_evidence"]]
     if evidence:
         leading = evidence[0]
         context = "vergleichbaren Zeilen" if leading["kind"] == "context" else "den übrigen Zeilen"
         summary = f"{leading['feature']} ist mit {format_number(leading['value'])} {leading['direction']} als der Median von {format_number(leading['median'])} bei {context}."
     elif available and row["anomaly"]:
-        summary = "Das Modell markiert eine ungewöhnliche Merkmalskombination. Die Einzelvergleiche liefern keinen belastbaren Hinweis auf ein bestimmtes Merkmal."
+        summary = "Das Modell markiert diese Zeile. Die Einzelvergleiche liefern keinen belastbaren Hinweis auf ein bestimmtes Merkmal."
     elif available:
         summary = "Das Modell markiert diese Zeile nicht. Die Vergleiche zeigen, wie ihre Messwerte im Datensatz liegen."
     else:
@@ -128,8 +139,9 @@ def explain_row(result: dict, row_id: int) -> dict:
         "row_id": row_id, "available": available, "flagged": row["anomaly"],
         "score": row["score"], "score_percentile": score_percentile,
         "summary": summary, "reasons": evidence, "comparisons": reasons[:5],
+        "assessment": "value_deviation" if evidence else "model_only" if available and row["anomaly"] else "unmarked" if available else "unavailable",
         "missing_features": missing, "reference_scope": "Gesamter Datensatz, ohne die untersuchte Zeile",
-        "method": "Statistische Vergleiche mit Median und Quartilen. Die nächsten 20 Zeilen (bei kleineren Datensätzen entsprechend weniger) werden anhand der jeweils anderen standardisierten, tatsächlich beobachteten Modellmerkmale ausgewählt; zusätzliche Gleichstände an der Grenze sind eingeschlossen. Zeilen mit fehlenden Vergleichsmerkmalen werden ausgelassen. Lokale Vergleiche werden nur bei mindestens fünf Referenzwerten und medianem RMS-Abstand von höchstens 0,75 Standardabweichungen verwendet.",
+        "method": "Statistische Vergleiche mit Median und Quartilen. Ein Einzelhinweis erfordert einen Wert außerhalb der 1,5-fachen Quartilsgrenzen, mindestens drei Vergleichsstreuungen Abstand vom Median oder eine Abweichung von konstanten Referenzwerten. Als Vergleichsstreuung dient MAD × 1,4826, ersatzweise Quartilsabstand / 1,349 oder Standardabweichung; bei konstanter lokaler Referenz ersatzweise die globale Streuung. Eine Abweichung von konstanten Referenzwerten muss bei vorhandener Streuung mindestens 0,2 Vergleichsstreuungen betragen. Die nächsten 20 Zeilen (bei kleineren Datensätzen entsprechend weniger) werden anhand der jeweils anderen standardisierten, tatsächlich beobachteten Modellmerkmale ausgewählt; zusätzliche Gleichstände an der Grenze sind eingeschlossen. Zeilen mit fehlenden Vergleichsmerkmalen werden ausgelassen. Lokale Vergleiche werden nur bei mindestens fünf Referenzwerten und medianem RMS-Abstand von höchstens 0,75 Standardabweichungen verwendet.",
         "limitation": "Die Vergleiche beschreiben beobachtete Abweichungen. Sie sind keine exakte Zerlegung des Isolation-Forest-Scores und erklären keine Ursachen.",
     }
     # Bounded cache: avoid retaining a growing copy of all point explanations.

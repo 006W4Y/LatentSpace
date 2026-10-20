@@ -39,6 +39,7 @@ class ExploreRequest(BaseModel):
     period: str = "month"
     aggregation: str = "mean"
     page: int = Field(default=0, ge=0, le=20000)
+    explain_page: bool = False
 
 
 def prepare(payload: dict, request: AnalysisRequest):
@@ -215,11 +216,14 @@ def explore(result: dict, request: ExploreRequest) -> dict:
     missing = int(subset.isna().sum().sum())
     insights = discover(result, subset, profiles, correlations, len(anomalies))
     explained_anomalies = [{**row, "explanation": explain_row(result, row["id"])} for row in anomalies[:30]]
+    page_rows = [result["rows"][i] for i in ids[request.page*50:(request.page+1)*50]]
+    if request.explain_page:
+        page_rows = [{**row, "explanation": explain_row(result, row["id"])} if row["anomaly"] else row for row in page_rows]
     return clean_json({
         "count": len(subset), "total": len(frame), "filtered_ids": ids,
         "missing": missing, "duplicates": int(subset.astype("string").duplicated().sum()),
         "profiles": profiles, "correlations": correlations, "trend": trend, "groups": groups[:30], "group_total": len(groups),
         "skipped_dates": skipped_dates, "clusters": cluster_profiles, "anomalies": explained_anomalies, "anomaly_count": len(anomalies),
-        "insights": insights, "rows": [result["rows"][i] for i in ids[request.page*50:(request.page+1)*50]],
+        "insights": insights, "rows": page_rows,
         "page": request.page,
     })

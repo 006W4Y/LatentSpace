@@ -49,7 +49,7 @@ def markdown_report(report: dict) -> str:
         lines.extend([f"### Zeile {row['id'] + 1} · Score {row['score']:.4f}", "", text(explanation["summary"])])
         for reason in explanation["reasons"]:
             scope = "ähnliche Zeilen in den anderen Modellmerkmalen" if reason["kind"] == "context" else "übriger Gesamtdatensatz"
-            lines.append(f"- {text(reason['feature'])}: {text(reason['detail'])} Vergleich: {scope}, n={reason['reference_n']}.")
+            lines.append(f"- {text(reason['feature'])}: {text(reason['detail'])} Vergleich: {scope}, n={reason['reference_n']}. Prüfregel: {text(reason['criterion'])}")
         lines.append("")
     lines.extend(["## Analyseparameter und Filter", "", "```json", json.dumps({"analysis": report["analysis"], "filters": report["selection"]["filters"]}, ensure_ascii=False, indent=2), "```", "", "## Grenzen der Auswertung", ""])
     lines.extend("- " + text(value) for value in report["limitations"])
