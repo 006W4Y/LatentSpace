@@ -188,22 +188,7 @@ def delete_dataset(dataset_id: str):
         raise KeyError(dataset_id)
 
 
-def demo_dataset() -> dict:
-    rng = np.random.default_rng(42)
-    n = 720
-    groups = rng.choice(["Dresden", "Leipzig", "Berlin"], n, p=[0.4, 0.35, 0.25])
-    segments = np.array([{"Dresden": 0, "Leipzig": 1, "Berlin": 2}[g] for g in groups])
-    days = rng.integers(0, 180, n)
-    amount = np.maximum(12, 80 + segments * 85 + days * 0.35 + rng.normal(0, 22, n))
-    units = np.maximum(1, np.round(2 + segments * 3 + rng.normal(0, 0.7, n)))
-    amount[[12, 97, 312, 580]] *= 7
-    frame = pd.DataFrame({
-        "Bestell_ID": [f"LS-{i + 1001}" for i in range(n)],
-        "Datum": (pd.Timestamp("2026-01-01") + pd.to_timedelta(days, unit="D")).strftime("%Y-%m-%d"),
-        "Standort": groups, "Umsatz": np.round(amount, 2), "Artikel": units.astype(int),
-        "Rabatt_Prozent": np.round(np.clip(segments * 6 + rng.normal(3, 2, n), 0, 30), 1),
-        "Lieferzeit_Tage": np.round(np.clip(6 - segments * 1.5 + rng.normal(0, 0.6, n), 1, 12), 1),
-        "Kanal": rng.choice(["Onlineshop", "Filiale", "Marktplatz"], n),
-    })
-    frame.loc[[5, 40, 101, 160, 310, 411], "Lieferzeit_Tage"] = np.nan
-    return save_dataset(frame, "Handelsdaten · Demo", notices=["Synthetische Beispieldaten mit drei Standorten, zeitlicher Entwicklung und bewusst eingebauten Auffälligkeiten."])
+def demo_dataset(kind: str = "retail") -> dict:
+    """Preserve the sample entry point; generators live outside file ingestion."""
+    from .demos import create_demo
+    return create_demo(kind)

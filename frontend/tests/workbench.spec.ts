@@ -1,6 +1,116 @@
 import { test, expect } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 
+test("energy sample supports negative measurements, calendar years, filters and evidence", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.locator(".demo-card")).toHaveCount(3);
+  await expect(page.locator(".demo-energy")).toContainText(
+    "Eine Zeile = ein Gebäude an einem Tag",
+  );
+  await page
+    .getByRole("button", { name: "Energie & Gebäude erkunden", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Was deine Daten zeigen" }),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".metrics-grid .metric").first()).toContainText(
+    "540",
+  );
+  await expect(page.locator(".profile-calendar")).toContainText("Okt 25");
+  await expect(page.locator(".profile-calendar")).toContainText("Mär 26");
+  const co2 = page.locator(".profile-card").filter({
+    has: page.getByRole("heading", { name: "CO2 ppm", exact: true }),
+  });
+  await expect(co2.locator(".warm-text")).toHaveText("15");
+  await page
+    .getByRole("button", { name: "Trends & Zeit", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "Darstellung", exact: true }),
+  ).toHaveValue("mean");
+  await page
+    .getByRole("combobox", { name: "Messwert", exact: true })
+    .selectOption("Außentemperatur_C");
+  await expect(page.locator(".recharts-area")).toBeVisible();
+  await page
+    .getByLabel("Filterspalte", { exact: true })
+    .selectOption("Gebäude");
+  await page.getByLabel("Filterwert", { exact: true }).selectOption("Labor");
+  await expect(page.locator(".filter-count")).toContainText("180 / 540");
+  await page.getByRole("button", { name: "Filter zurücksetzen" }).click();
+  await page
+    .getByRole("button", { name: "Auffälligkeiten", exact: true })
+    .click();
+  await expect(page.locator(".anomaly-reason-cell").first()).toContainText(
+    "Median",
+  );
+  await page
+    .locator(".table-scroll tbody tr")
+    .first()
+    .getByRole("button")
+    .first()
+    .click();
+  await expect(page.locator(".comparison-card").first()).toContainText(
+    "Vergleichsmedian",
+  );
+  expect(errors).toEqual([]);
+});
+
+test("learning sample opens from import dialog without inventing a time axis", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(page.locator(".demo-card")).toHaveCount(3);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByRole("button", { name: "Eigene Daten erkunden" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.locator(".demo-card")).toHaveCount(3);
+  await dialog
+    .getByRole("button", { name: "Lernen & Kursnutzung erkunden", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Was deine Daten zeigen" }),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".metrics-grid .metric").first()).toContainText(
+    "420",
+  );
+  await expect(page.locator(".profile-calendar")).toHaveCount(0);
+  await expect(page.locator(".profile-identifier")).toContainText("420");
+  await page
+    .getByRole("button", { name: "Trends & Zeit", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "Ohne zeitliche Angaben lässt sich kein Zeittrend ableiten.",
+      { exact: false },
+    ),
+  ).toBeVisible();
+  await expect(page.locator(".recharts-area")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Zusammenhänge", exact: true })
+    .click();
+  await expect(page.locator(".correlation-row").first()).toBeVisible();
+  await page.getByRole("button", { name: "Datentabelle", exact: true }).click();
+  await expect(page.locator(".data-table tbody")).toContainText("00001");
+  await page.getByRole("button", { name: "Insights", exact: true }).click();
+  await expect(page.locator(".discovery-relation").first()).toBeVisible();
+  await expect(page.locator(".discovery-trend")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+});
+
 test("demo, linked filters, analysis views, inspector and export", async ({
   page,
 }) => {

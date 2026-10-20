@@ -16,6 +16,14 @@ export type Dataset = {
   preview: Record<string, Value>[];
   notices: string[];
 };
+export type Demo = {
+  id: "retail" | "energy" | "learning";
+  title: string;
+  description: string;
+  grain: string;
+  row_count: number;
+  tags: string[];
+};
 export type DataRow = {
   id: number;
   values: Record<string, Value>;

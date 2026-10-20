@@ -6,10 +6,12 @@ Eine große, zugängliche Toolbox für die Arbeit mit Daten. Menschen importiere
 
 Die Datenlandschaft ergänzt Zeitreihen, Tabellen und Diagramme. Erkenntnisse werden in überprüfbare Befunde, konkrete Auswahlen und Exporte überführt. LatentSpace verändert keine Originaldaten. Fachliche Bewertung, Bereinigung und weitere Verarbeitung übernimmt ein Analyst anhand der Ausgaben.
 
+**Aktuell vereinbarter Umfang:** Eine Datei pro Analyse. Keine Verknüpfung mehrerer Dateien und kein wiederkehrender Importvergleich in der nächsten Ausbaustufe. Die Vollversion soll zuerst aus einer einzelnen Tabelle möglichst viele verständliche, belegte Erkenntnisse gewinnen; weitere Dateifunktionen werden erst nach erneuter Produktentscheidung geplant.
+
 ## Implementiert bis Version 0.2
 
 - Vollständiger Ablauf von CSV/XLSX über Rollenkorrektur bis zu realen Analysen und Export.
-- Lokale Speicherung und synthetischer Demodatensatz.
+- Lokale Speicherung und drei einzeln auswählbare synthetische Beispielkontexte: Handel, Gebäudetechnik und Lernen. Ein gemeinsamer Analysepfad mit Kontexttests über CSV-Importe, unterschiedliche Seeds und umbenannte Spalten.
 - Verknüpfte Filter und Rechteckauswahl zwischen Ansichten.
 - PCA und UMAP, HDBSCAN und Isolation Forest auf separatem Merkmalsraum.
 - Gruppenprofile, Zeitaggregate, Pearson-Korrelation und Datenprofile.
@@ -31,7 +33,7 @@ Die Datenlandschaft ergänzt Zeitreihen, Tabellen und Diagramme. Erkenntnisse we
 
 ## Danach: größere Toolbox
 
-- Mehrere Tabellen verbinden; Join-Vorschau und Eindeutigkeitsprüfung.
+- Nur nach erneuter Produktentscheidung: mehrere Tabellen verbinden oder wiederkehrende Dateiimporte vergleichen.
 - Nichtlineare Zusammenhänge und weitere Projektionen wie t-SNE.
 - Prognosen mit zeitgerechtem Backtesting, Baselines und Unsicherheiten.
 - Modellrepräsentationen über stabile IDs und Nachbarschaften vergleichen.

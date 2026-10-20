@@ -37,7 +37,7 @@ class ExploreRequest(BaseModel):
     value_column: str | None = None
     group_column: str | None = None
     period: str = "month"
-    aggregation: str = "sum"
+    aggregation: str = "mean"
     page: int = Field(default=0, ge=0, le=20000)
 
 

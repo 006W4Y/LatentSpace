@@ -14,7 +14,21 @@ cd LatentSpace
 docker compose up --build
 ```
 
-Öffne **http://localhost:8000** und wähle **Mit Beispieldaten starten**. Die Beispieldaten sind synthetische Handelsdaten mit drei Standorten und eingebauten Auffälligkeiten.
+Öffne **http://localhost:8000** und importiere eine Datei oder wähle einen der drei Beispieldatensätze. **Mit Beispieldaten starten** öffnet weiterhin direkt die Handelsdaten.
+
+## Drei unterschiedliche Beispielkontexte
+
+Alle Beispiele sind synthetisch, reproduzierbar und auf der Startseite sowie im Importdialog einzeln auswählbar. Jede Analyse untersucht **eine Datei bzw. einen Datensatz**. Es werden keine Tabellen verbunden oder Dateien miteinander verglichen.
+
+| Beispiel | Eine Zeile bedeutet | Umfang | Was sich damit erkunden lässt |
+| --- | --- | --- | --- |
+| Handel & Bestellungen | Eine Bestellung | 720 Zeilen, 8 Spalten | Standortunterschiede, unregelmäßige Bestellzeitpunkte, hohe Einzelumsätze, fehlende Lieferzeiten |
+| Energie & Gebäude | Ein Gebäude an einem Tag | 540 Zeilen, 8 Spalten | Messungen über einen Jahreswechsel, negative Temperaturen, Verbrauch und Belegung, zusammenhängender Sensorausfall |
+| Lernen & Kursnutzung | Eine Person in einem Kurs | 420 Zeilen, 8 Spalten | Querschnitt ohne Datum, Kursformate, Zusammenhänge von Lernaufwand und Ergebnissen, ungewöhnliche Kombinationen innerhalb begrenzter Skalen, Kennungen mit führenden Nullen |
+
+Die Beispiele durchlaufen dieselben Analysen wie eigene Dateien. Es gibt keine vorgefertigten Insight-Ergebnisse oder besonderen Erkennungsschwellen je Beispiel. Muster sind zur Erprobung eingebaut; die Modellmarkierungen sind keine vollständige Liste dieser Muster. Gebäudemessungen wiederholen sich je Gebäude, die Lernstudie ist keine kausale Untersuchung. Beide Hinweise bleiben bei den Datensätzen sichtbar.
+
+Zeit- und Gruppenansichten starten mit dem **Durchschnitt**. Summe, Median und Zeilenzahl lassen sich ausdrücklich auswählen. So werden Temperaturen oder Punktzahlen nicht automatisch aufsummiert. Ohne Datumsspalte entstehen keine Zeittrends; andere Ansichten bleiben nutzbar.
 
 Docker Compose speichert importierte Datensätze in einem benannten Volume. `docker compose down` erhält sie; `docker compose down -v` löscht das Volume. Der Dienst wird nur an die lokale Loopback-Adresse gebunden.
 
@@ -121,10 +135,13 @@ npm run test:e2e
 
 Die Browserprüfungen starten eine eigene Serverinstanz mit temporärer Datenablage. GitHub Actions führt die Backend-Tests und den Frontend-Build aus.
 
+Die Kontexttests importieren alle drei Beispiele als gewöhnliche CSV-Dateien, jeweils mit dem festen Demoseed und einem weiteren Seed. Sie prüfen nachvollziehbare Befunde, unveränderte Originalwerte, Berichte und die fehlende Zeitachse der Lernstudie. Zusätzliche Prüfungen benennen alle Spalten um und vergleichen die Analyseergebnisse. Das schützt vor einer Bindung an Handelsbegriffe; synthetische Tests ersetzen keine Erprobung mit echten Nutzerdaten.
+
 ## Projektstruktur
 
 ```text
 backend/app/data.py        Import, Rollenvorschläge, SQLite
+backend/app/demos.py       Drei unabhängige synthetische Beispielkontexte
 backend/app/analysis.py    Vorverarbeitung, Modelle, gefilterte Statistiken
 backend/app/insights.py    Typgerechte Datenprofile und automatische Befunde
 backend/app/explanations.py Statistische Vergleichswerte für einzelne Zeilen

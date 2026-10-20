@@ -7,6 +7,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -15,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .analysis import AnalysisRequest, ExploreRequest, analyze, explore, prepare, public_analysis
 from .data import MAX_BYTES, delete_dataset, demo_dataset, import_file, list_datasets, load_dataset, metadata
+from .demos import demo_catalog
 from .explanations import explain_row
 from .reports import build_report, markdown_report
 
@@ -35,9 +37,14 @@ def datasets():
     return list_datasets()
 
 
+@app.get("/api/demos")
+def demos():
+    return demo_catalog()
+
+
 @app.post("/api/datasets/demo", status_code=201)
-def demo():
-    return demo_dataset()
+def demo(kind: Literal["retail", "energy", "learning"] = "retail"):
+    return demo_dataset(kind)
 
 
 @app.post("/api/datasets", status_code=201)

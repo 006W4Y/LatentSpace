@@ -52,6 +52,7 @@ import type {
   Column,
   DataRow,
   Dataset,
+  Demo,
   Exploration,
   ExploreConfig,
   Role,
@@ -61,6 +62,7 @@ import InsightFeed, { variedInsights } from "./components/InsightFeed";
 import ProfileCard from "./components/ProfileCard";
 import ExplanationPanel from "./components/ExplanationPanel";
 import ReportActions from "./components/ReportActions";
+import DemoGallery from "./components/DemoGallery";
 import type { Insight } from "./api";
 
 type View =
@@ -139,7 +141,7 @@ const emptyExplore: ExploreConfig = {
   value_column: null,
   group_column: null,
   period: "month",
-  aggregation: "sum",
+  aggregation: "mean",
   page: 0,
 };
 const formatValue = (value: unknown) =>
@@ -509,6 +511,7 @@ function ConfigDialog({
 
 export default function App() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
+  const [demos, setDemos] = useState<Demo[]>([]);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [job, setJob] = useState<string | null>(null);
@@ -547,6 +550,11 @@ export default function App() {
   useEffect(() => {
     void refreshDatasets();
   }, [refreshDatasets]);
+  useEffect(() => {
+    api<Demo[]>("/demos")
+      .then(setDemos)
+      .catch((e) => setError(e.message));
+  }, []);
   useEffect(() => {
     if (!message) return;
     const timeout = setTimeout(() => setMessage(""), 3500);
@@ -659,11 +667,13 @@ export default function App() {
     }
   }
 
-  async function loadDemo() {
+  async function loadDemo(kind: Demo["id"] = "retail") {
     setBusy(true);
     setError("");
     try {
-      const created = await api<Dataset>("/datasets/demo", { method: "POST" });
+      const created = await api<Dataset>(`/datasets/demo?kind=${kind}`, {
+        method: "POST",
+      });
       await refreshDatasets();
       await run(created);
     } catch (e) {
@@ -1096,6 +1106,11 @@ export default function App() {
                 </span>
               </div>
             </Card>
+            <DemoGallery
+              demos={demos}
+              busy={busy}
+              onSelect={(kind) => void loadDemo(kind)}
+            />
             <div className="section-heading">
               <div>
                 <h2>Was möchtest du herausfinden?</h2>
@@ -1648,8 +1663,9 @@ export default function App() {
                             : "Noch keine Datumsspalte erkannt."
                         }
                       >
-                        Du kannst die Spaltenrolle unter „Analyse einstellen“
-                        anpassen.
+                        {dates.length
+                          ? "Wähle die passenden Spalten für diesen Zeitverlauf."
+                          : "Ohne zeitliche Angaben lässt sich kein Zeittrend ableiten. Gruppen, Zusammenhänge und Auffälligkeiten kannst du weiterhin erkunden. Falls eine Spalte ein Datum enthält, prüfe ihre Rolle unter „Analyse einstellen“."}
                       </Empty>
                     )}
                     <div className="method-note">
@@ -2430,17 +2446,12 @@ export default function App() {
                   Spaltenrollen prüfen.
                 </p>
               </div>
-              <div className="import-demo">
-                <span>Noch keine Datei zur Hand?</span>
-                <button
-                  className="text-button"
-                  disabled={busy}
-                  onClick={() => void loadDemo()}
-                >
-                  Beispieldaten ausprobieren
-                  <ArrowRight size={15} />
-                </button>
-              </div>
+              <DemoGallery
+                demos={demos}
+                busy={busy}
+                compact
+                onSelect={(kind) => void loadDemo(kind)}
+              />
             </div>
           </section>
         </div>
