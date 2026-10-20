@@ -4,6 +4,8 @@
 
 Diese erste funktionsfähige Version richtet sich an Menschen, die ihre Daten verstehen möchten. Die Datenlandschaft ist eine von mehreren verknüpften Perspektiven.
 
+**Version 0.2 konzentriert sich auf Erkenntnisse:** Auffälligkeiten werden mit konkreten Vergleichswerten erklärt, automatische Befunde sind nach Themen durchsuchbar und lassen sich als Analysebericht an Fachleute weitergeben. Die Originaldaten werden nicht bearbeitet.
+
 ## Schnellstart mit Docker
 
 ```bash
@@ -56,14 +58,31 @@ python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 | --- | --- |
 | Daten importieren | CSV mit automatischer Trennzeichenerkennung und UTF-8-/Windows-Kodierung; XLSX, erstes Tabellenblatt |
 | Daten vorbereiten | Dezimalformat auswählen, Rollen überprüfen, Modellmerkmale festlegen |
+| Insights entdecken | Bis zu 16 automatische Befunde mit Zahlenbelegen, Vergleichsbasis, Methoden und Verknüpfung zur Detailansicht |
 | Überblick gewinnen | Verteilungen, Mittelwert, Median, fehlende Werte und Datenprofile |
 | Zeitverläufe erkunden | Tag/Woche/Monat; Summe, Durchschnitt oder Zeilenzahl |
 | Gruppen vergleichen | Kategorien vergleichen; automatisch gefundene HDBSCAN-Gruppen untersuchen |
-| Auffälligkeiten prüfen | Isolation Forest, sortierte Beispiele und Originalwerte im Inspector |
-| Zusammenhänge untersuchen | Pearson-Korrelation mit Anzahl vollständiger Wertepaare |
+| Auffälligkeiten verstehen | Isolation Forest plus statistische Einzelvergleiche: Wert, Median, Quartile und tatsächlich ähnliche Zeilen |
+| Zusammenhänge untersuchen | Pearson- und Spearman-Korrelation mit Anzahl vollständiger Wertepaare |
+| Verteilungen lesen | Chronologische Monatsnamen, benannte Kategorien, diskrete Zählwerte und eindeutig beschriftete Histogramme; Kennungen ohne Scheinverteilung |
 | Datenlandschaft erkunden | PCA/UMAP; 2D und orthografische 3D-Ansicht; Zoomen, Verschieben/Drehen und Rechteckauswahl |
 | Auswahl weiterverwenden | Suche und Filter gelten ansichtsübergreifend; gefilterte CSV exportieren |
 | Arbeit nachvollziehen | Analysekonfiguration samt Parametern, Seed und Paketversionen als JSON exportieren; Filteransichten im Browser merken |
+| Erkenntnisse übergeben | Markdown-/JSON-Bericht mit Befunden, Zeilenbezug, Erklärungen, Parametern und SHA-256-Fingerabdruck der Originalwerte |
+
+## Was eine Erklärung bedeutet
+
+Eine Modellmarkierung allein erklärt noch nicht, was an einer Zeile ungewöhnlich ist. Der Inspector zeigt deshalb zusätzlich beobachtete Abweichungen:
+
+- Vergleich eines Messwerts mit Median und mittleren 50 % der **übrigen** Zeilen. Die untersuchte Zeile wird aus ihrer Referenz ausgeschlossen.
+- Bei mehreren Modellmerkmalen: Vergleich mit Nachbarn, die anhand der **jeweils anderen, tatsächlich beobachteten Merkmale** ausgewählt wurden. Zeilen mit fehlenden Vergleichsmerkmalen werden ausgelassen. Mindestens fünf Referenzwerte und ein ausreichend kleiner standardisierter Abstand sind Voraussetzung. Eine entfernte Nachbarschaft wird nicht als ähnlich ausgegeben.
+- Fehlende Originalwerte werden nicht als beobachtete Messwerte erklärt. Ist kein belastbarer Einzelhinweis vorhanden, wird das ausdrücklich angezeigt.
+
+Diese Vergleiche sind **keine exakte Zerlegung des Isolation-Forest-Scores und keine kausale Erklärung**. Im Bericht stehen Vergleichsgröße, Stichprobengröße und methodische Grenzen.
+
+Die Insight-Ansicht erkennt unter anderem Quartilsabweichungen, Unterschiede von Gruppenmedianen, Kategorie-Konzentrationen, Korrelationen, fehlende Werte und Änderungen von Monatsmitteln. Monatsvergleiche verwenden nur Monate, deren Kalendergrenzen vom beobachteten Zeitraum abgedeckt sind. Die Befunde sind explorativ; es werden keine statistische Signifikanz, vollständige Erfassung oder zukünftige Entwicklungen behauptet.
+
+Zur Weitergabe **Bericht exportieren** wählen: Markdown bietet einen lesbaren Bericht; JSON enthält zusätzlich vollständige strukturierte Befunde, Zeilen-IDs und Vergleichswerte. CSV-Exporte ergänzen die 1-basierte Datenzeile, den Anomaliescore und Modellmarkierungen. Originalspalten werden bei Namenskonflikten nicht überschrieben.
 
 ## Import und Grenzen
 
@@ -74,6 +93,7 @@ python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 - Für Cluster, Auffälligkeiten und Projektion werden fehlende Werte mit dem Median ergänzt und Messwerte standardisiert. Originaldaten, Verteilungen und Zeitaggregate behalten fehlende Werte bei. Ungültige Konvertierungen werden gemeldet.
 - Cluster und Anomalien werden im standardisierten **Merkmalsraum** berechnet, nicht auf den sichtbaren Projektionskoordinaten. Filter ändern die beschreibenden Statistiken, aber trainieren diese Modelle nicht neu.
 - Ein Anomaliescore ist keine Fehlerwahrscheinlichkeit. Eine Projektion beweist keine Datenlücken; Korrelation belegt keine Ursache. Die App stellt diese Grenzen bei den jeweiligen Ansichten dar.
+- Monatscodes werden nur in ausdrücklich benannten Monatsspalten (`Monat`, `month`, `Monatsnummer`, `month_index`) interpretiert. Enthalten sie eine 0, gilt 0=Januar; sonst 1=Januar. Die verwendete Konvention wird bei der Verteilung genannt. Ohne 0 ist die Kodierung nicht eindeutig ableitbar; die Werte selbst bleiben erhalten.
 - Für UMAP ist der erste Start wegen der JIT-Kompilierung langsamer. Bei weniger als sechs Zeilen wird PCA verwendet; bei fehlenden variierenden Messwerten bleiben Tabellen und Gruppenvergleiche verfügbar.
 
 ## Speicherung und Betrieb
@@ -106,6 +126,9 @@ Die Browserprüfungen starten eine eigene Serverinstanz mit temporärer Datenabl
 ```text
 backend/app/data.py        Import, Rollenvorschläge, SQLite
 backend/app/analysis.py    Vorverarbeitung, Modelle, gefilterte Statistiken
+backend/app/insights.py    Typgerechte Datenprofile und automatische Befunde
+backend/app/explanations.py Statistische Vergleichswerte für einzelne Zeilen
+backend/app/reports.py     Analystenberichte als Markdown und JSON
 backend/app/main.py        FastAPI, Job-Warteschlange, Export, Webauslieferung
 backend/tests/            Fachliche und API-Tests
 frontend/src/App.tsx       Arbeitsbereich und Analyseansichten

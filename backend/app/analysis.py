@@ -15,6 +15,8 @@ from sklearn.preprocessing import StandardScaler
 from threadpoolctl import threadpool_limits
 
 from .data import ROLES, clean_json, date_series, number_series
+from .explanations import explain_row
+from .insights import build_profile, discover
 
 
 class AnalysisRequest(BaseModel):
@@ -76,6 +78,7 @@ def analyze(payload: dict, request: AnalysisRequest) -> dict:
     scores = np.zeros(n)
     explained = None
     actual_projection = request.projection
+    matrix = None
     with threadpool_limits(limits=2):
         if usable and n >= 3:
             matrix = StandardScaler().fit_transform(SimpleImputer(strategy="median").fit_transform(frame[usable]))
@@ -116,7 +119,7 @@ def analyze(payload: dict, request: AnalysisRequest) -> dict:
         "notices": notices, "numeric_columns": numeric,
         "cluster_count": len(set(clusters.tolist()) - {-1}), "anomaly_count": int(anomaly.sum()),
         "rows": clean_json([{"id": i, "values": payload["rows"][i], "coords": coords[i].tolist(), "cluster": int(clusters[i]), "anomaly": bool(anomaly[i]), "score": float(scores[i])} for i in range(n)]),
-        "_frame": frame,
+        "_frame": frame, "_matrix": matrix,
     }
 
 
@@ -134,7 +137,7 @@ def explore(result: dict, request: ExploreRequest) -> dict:
         raise ValueError("Für die Zeitachse ist eine Datumsspalte nötig.")
     if request.value_column and roles[request.value_column] != "number":
         raise ValueError("Bitte einen numerischen Messwert auswählen.")
-    if request.period not in {"day", "week", "month"} or request.aggregation not in {"sum", "mean", "count"}:
+    if request.period not in {"day", "week", "month"} or request.aggregation not in {"sum", "mean", "median", "count"}:
         raise ValueError("Ungültige Zeitauflösung oder Aggregation.")
     mask = pd.Series(True, index=frame.index)
     if request.query:
@@ -158,30 +161,17 @@ def explore(result: dict, request: ExploreRequest) -> dict:
     subset = frame.loc[mask]
     ids = subset.index.tolist()
     numeric = result["numeric_columns"]
-    profiles = []
-    for name in frame.columns:
-        series = subset[name]
-        item = {"name": name, "role": roles[name], "missing": int(series.isna().sum()), "unique": int(series.nunique())}
-        if roles[name] == "number":
-            present = series.dropna()
-            item.update({"mean": present.mean(), "median": present.median(), "min": present.min(), "max": present.max()})
-            if len(present):
-                counts, edges = np.histogram(present, bins=min(14, max(1, present.nunique())))
-                item["distribution"] = [{"label": f"{edges[i]:.3g}", "count": int(count), "start": float(edges[i]), "end": float(edges[i+1])} for i, count in enumerate(counts)]
-            else:
-                item["distribution"] = []
-        else:
-            item["distribution"] = [{"label": str(label), "count": int(count)} for label, count in series.dropna().astype(str).value_counts().head(12).items()]
-        profiles.append(item)
+    profiles = [build_profile(name, roles[name], subset[name]) for name in frame.columns]
     correlations = []
     if len(subset) >= 3:
         corr = subset[numeric].corr(method="pearson")
+        rank_corr = subset[numeric].corr(method="spearman")
         for i, name in enumerate(numeric):
             for other in numeric[i+1:]:
                 count = int(subset[[name, other]].dropna().shape[0])
                 value = corr.loc[name, other]
                 if pd.notna(value):
-                    correlations.append({"x": name, "y": other, "value": float(value), "count": count})
+                    correlations.append({"x": name, "y": other, "value": float(value), "spearman": rank_corr.loc[name, other], "count": count})
     correlations.sort(key=lambda item: abs(item["value"]), reverse=True)
     trend = []
     skipped_dates = 0
@@ -196,7 +186,7 @@ def explore(result: dict, request: ExploreRequest) -> dict:
                 values = dated.groupby(grouper).size()
             elif request.value_column:
                 grouped = dated.groupby(grouper)[request.value_column]
-                values = grouped.sum(min_count=1) if request.aggregation == "sum" else grouped.mean()
+                values = grouped.sum(min_count=1) if request.aggregation == "sum" else grouped.median() if request.aggregation == "median" else grouped.mean()
             else:
                 values = pd.Series(dtype=float)
             trend = [{"date": key.strftime("%Y-%m-%d"), "value": value} for key, value in values.items()]
@@ -207,7 +197,7 @@ def explore(result: dict, request: ExploreRequest) -> dict:
             value = None
             if request.value_column:
                 source = part[request.value_column]
-                value = source.mean() if request.aggregation == "mean" else source.sum(min_count=1)
+                value = source.mean() if request.aggregation == "mean" else source.median() if request.aggregation == "median" else source.sum(min_count=1)
             groups.append({"label": str(key) if pd.notna(key) else "(fehlend)", "count": len(part), "value": len(part) if request.aggregation == "count" else value})
         groups.sort(key=lambda item: item["count"], reverse=True)
     cluster_profiles = []
@@ -223,19 +213,13 @@ def explore(result: dict, request: ExploreRequest) -> dict:
         cluster_profiles.append({"cluster": cluster, "count": len(members), "differences": differences[:3]})
     anomalies = sorted((result["rows"][i] for i in ids if result["rows"][i]["anomaly"]), key=lambda row: row["score"], reverse=True)
     missing = int(subset.isna().sum().sum())
-    insights = []
-    if missing:
-        insights.append({"kind": "quality", "title": f"{missing} fehlende Werte", "detail": "Diese Werte bleiben in den Originaldaten leer. Prüfe die betroffenen Spalten in der Übersicht."})
-    if correlations:
-        item = correlations[0]
-        insights.append({"kind": "relation", "title": f"{item['x']} & {item['y']}", "detail": f"Pearson-Korrelation {item['value']:.2f} bei {item['count']} Wertepaaren. Ein Zusammenhang belegt keine Ursache."})
-    if anomalies:
-        insights.append({"kind": "anomaly", "title": f"{len(anomalies)} auffällige Zeilen", "detail": "Isolation Forest bewertet Kombinationen der ausgewählten Merkmale. Auffällig bedeutet nicht fehlerhaft."})
+    insights = discover(result, subset, profiles, correlations, len(anomalies))
+    explained_anomalies = [{**row, "explanation": explain_row(result, row["id"])} for row in anomalies[:30]]
     return clean_json({
         "count": len(subset), "total": len(frame), "filtered_ids": ids,
         "missing": missing, "duplicates": int(subset.astype("string").duplicated().sum()),
         "profiles": profiles, "correlations": correlations, "trend": trend, "groups": groups[:30], "group_total": len(groups),
-        "skipped_dates": skipped_dates, "clusters": cluster_profiles, "anomalies": anomalies[:30], "anomaly_count": len(anomalies),
+        "skipped_dates": skipped_dates, "clusters": cluster_profiles, "anomalies": explained_anomalies, "anomaly_count": len(anomalies),
         "insights": insights, "rows": [result["rows"][i] for i in ids[request.page*50:(request.page+1)*50]],
         "page": request.page,
     })

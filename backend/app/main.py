@@ -10,13 +10,15 @@ from pathlib import Path
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .analysis import AnalysisRequest, ExploreRequest, analyze, explore, prepare, public_analysis
 from .data import MAX_BYTES, delete_dataset, demo_dataset, import_file, list_datasets, load_dataset, metadata
+from .explanations import explain_row
+from .reports import build_report, markdown_report
 
-app = FastAPI(title="LatentSpace", version="0.1.0")
+app = FastAPI(title="LatentSpace", version="0.2.0")
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="latentspace")
 jobs: dict[str, dict] = {}
 lock = threading.Lock()
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.1.0"}
+    return {"status": "ok", "version": "0.2.0"}
 
 
 @app.get("/api/datasets")
@@ -152,10 +154,33 @@ def export(job_id: str, request: ExploreRequest):
         return name
     cluster_name = annotation_name("LatentSpace_Cluster")
     anomaly_name = annotation_name("LatentSpace_Auffaellig")
-    rows = [{**result["rows"][i]["values"], cluster_name: result["rows"][i]["cluster"], anomaly_name: result["rows"][i]["anomaly"]} for i in selected]
+    row_name = annotation_name("LatentSpace_Zeile")
+    score_name = annotation_name("LatentSpace_Anomaliescore")
+    rows = [{**result["rows"][i]["values"], cluster_name: result["rows"][i]["cluster"], anomaly_name: result["rows"][i]["anomaly"], row_name: i + 1, score_name: result["rows"][i]["score"]} for i in selected]
     frame = pd.DataFrame(rows, columns=columns).map(lambda value: "'" + value if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")) else value)
     data = frame.to_csv(index=False).encode("utf-8-sig")
     return StreamingResponse(io.BytesIO(data), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="latentspace-auswahl.csv"'})
+
+
+@app.get("/api/analyses/{job_id}/rows/{row_id}/explanation")
+def row_explanation(job_id: str, row_id: int):
+    try:
+        return explain_row(require_job(job_id, done=True)["result"], row_id)
+    except KeyError as exc:
+        raise HTTPException(404, "Datenzeile nicht gefunden.") from exc
+
+
+@app.post("/api/analyses/{job_id}/report")
+def report(job_id: str, request: ExploreRequest, format: str = "markdown"):
+    if format not in {"markdown", "json"}:
+        raise HTTPException(422, "Bitte Markdown oder JSON als Berichtsformat wählen.")
+    try:
+        data = build_report(require_job(job_id, done=True)["result"], request)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    if format == "json":
+        return JSONResponse(data, headers={"Content-Disposition": 'attachment; filename="latentspace-insights.json"'})
+    return StreamingResponse(io.BytesIO(markdown_report(data).encode("utf-8")), media_type="text/markdown", headers={"Content-Disposition": 'attachment; filename="latentspace-insights.md"'})
 
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "dist"

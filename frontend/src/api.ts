@@ -23,6 +23,63 @@ export type DataRow = {
   cluster: number;
   anomaly: boolean;
   score: number;
+  explanation?: RowExplanation;
+};
+export type Comparison = {
+  feature: string;
+  value: number;
+  kind: "global" | "context";
+  direction: string;
+  median: number;
+  q1: number;
+  q3: number;
+  min: number;
+  max: number;
+  reference_n: number;
+  percentile: number;
+  deviation: number | null;
+  is_evidence: boolean;
+  other_features: string[];
+  title: string;
+  detail: string;
+};
+export type RowExplanation = {
+  row_id: number;
+  available: boolean;
+  flagged: boolean;
+  score: number;
+  score_percentile: number | null;
+  summary: string;
+  reasons: Comparison[];
+  comparisons: Comparison[];
+  missing_features: string[];
+  reference_scope: string;
+  method: string;
+  limitation: string;
+};
+export type Insight = {
+  id: string;
+  kind: "anomaly" | "trend" | "group" | "relation" | "quality";
+  title: string;
+  detail: string;
+  evidence: { label: string; value: string }[];
+  method: string;
+  priority: number;
+  sample_size: number;
+  scope: string;
+  action: Partial<ExploreConfig> & {
+    view:
+      | "overview"
+      | "insights"
+      | "trends"
+      | "groups"
+      | "anomalies"
+      | "relations"
+      | "landscape"
+      | "data";
+  };
+  limitation: string;
+  row_ids: number[];
 };
 export type AnalysisConfig = {
   roles: Record<string, Role>;
@@ -69,7 +126,26 @@ export type Profile = {
   median?: number | null;
   min?: number | null;
   max?: number | null;
-  distribution: { label: string; count: number }[];
+  q1?: number | null;
+  q3?: number | null;
+  observed: number;
+  distribution_kind:
+    | "histogram"
+    | "discrete"
+    | "calendar"
+    | "month_codes"
+    | "categories"
+    | "identifier"
+    | "text";
+  summary: string;
+  distribution_note: string;
+  distribution: {
+    label: string;
+    count: number;
+    short_label?: string;
+    start?: number;
+    end?: number;
+  }[];
 };
 export type Exploration = {
   count: number;
@@ -79,7 +155,13 @@ export type Exploration = {
   duplicates: number;
   page: number;
   profiles: Profile[];
-  correlations: { x: string; y: string; value: number; count: number }[];
+  correlations: {
+    x: string;
+    y: string;
+    value: number;
+    spearman: number | null;
+    count: number;
+  }[];
   trend: { date: string; value: number | null }[];
   groups: { label: string; count: number; value: number | null }[];
   group_total: number;
@@ -97,7 +179,7 @@ export type Exploration = {
   anomalies: DataRow[];
   anomaly_count: number;
   rows: DataRow[];
-  insights: { kind: string; title: string; detail: string }[];
+  insights: Insight[];
 };
 
 export async function api<T>(
@@ -143,7 +225,7 @@ export const roleLabels: Record<Role, string> = {
   text: "Text",
 };
 export const palette = [
-  "#356f5b",
+  "#4e77c9",
   "#d99861",
   "#8d8cc3",
   "#6aa9b4",

@@ -54,13 +54,18 @@ import type {
   Dataset,
   Exploration,
   ExploreConfig,
-  Profile,
   Role,
 } from "./api";
 import Landscape from "./components/Landscape";
+import InsightFeed, { variedInsights } from "./components/InsightFeed";
+import ProfileCard from "./components/ProfileCard";
+import ExplanationPanel from "./components/ExplanationPanel";
+import ReportActions from "./components/ReportActions";
+import type { Insight } from "./api";
 
 type View =
   | "overview"
+  | "insights"
   | "trends"
   | "groups"
   | "anomalies"
@@ -78,6 +83,13 @@ const navigation: {
     label: "Übersicht",
     icon: LayoutDashboard,
     description: "Ein erster Blick auf das, was in deinen Daten steckt.",
+  },
+  {
+    id: "insights",
+    label: "Insights",
+    icon: Sparkles,
+    description:
+      "Automatisch entdeckte Muster mit konkreten Belegen und Vergleichswerten.",
   },
   {
     id: "trends",
@@ -194,23 +206,6 @@ function Metric({
     </Card>
   );
 }
-function Distribution({ profile }: { profile: Profile }) {
-  return (
-    <div className="mini-chart">
-      <ResponsiveContainer width="100%" height={100}>
-        <BarChart data={profile.distribution}>
-          <Tooltip
-            cursor={{ fill: "#f1f4ed" }}
-            contentStyle={{ borderRadius: 10, border: "1px solid #e4e8df" }}
-            formatter={(value) => [number(Number(value), 0), "Zeilen"]}
-          />
-          <Bar dataKey="count" fill="#81a58a" radius={[3, 3, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
 function Illustration() {
   const dots = useMemo(
     () =>
@@ -585,6 +580,15 @@ export default function App() {
     };
   }, [job, config]);
 
+  function exploreInsight(insight: Insight) {
+    const { view: target, ...settings } = insight.action;
+    update({
+      ...settings,
+      ...(insight.row_ids.length ? { row_ids: insight.row_ids } : {}),
+    });
+    setView(target);
+  }
+
   function update(patch: Partial<ExploreConfig>) {
     setConfig((previous) => ({ ...previous, ...patch, page: patch.page ?? 0 }));
   }
@@ -807,6 +811,7 @@ export default function App() {
       >
         <option value="sum">Summe</option>
         <option value="mean">Durchschnitt</option>
+        <option value="median">Median</option>
         <option value="count">Anzahl Zeilen</option>
       </select>
     </Field>
@@ -940,7 +945,7 @@ export default function App() {
             <ArrowUpRight size={14} />
           </button>
           <span className="version">
-            LATENTSPACE <span>v0.1 · LOCAL</span>
+            LATENTSPACE <span>v0.2 · INSIGHTS</span>
           </span>
         </div>
       </aside>
@@ -1045,7 +1050,7 @@ export default function App() {
                   auffällt.
                 </p>
               </div>
-              <Badge>Für neugierige Menschen.</Badge>
+              <Badge>Explorative Datenanalyse</Badge>
             </div>
             <Card className="welcome-hero">
               <div className="hero-copy">
@@ -1165,6 +1170,9 @@ export default function App() {
                 <p>{activeNavigation.description}</p>
               </div>
               <div className="heading-actions">
+                {job && (
+                  <ReportActions job={job} config={config} onError={setError} />
+                )}
                 <button
                   className="button secondary small"
                   onClick={() => setPending(dataset)}
@@ -1344,6 +1352,30 @@ export default function App() {
                         icon={Activity}
                       />
                     </div>
+                    <div className="section-heading discoveries-heading">
+                      <div>
+                        <span className="eyebrow">
+                          AUTOMATISCH ERKANNT · MIT VERGLEICHSWERTEN
+                        </span>
+                        <h2>Was deine Daten zeigen</h2>
+                        <p>
+                          Konkrete Befunde für deine aktuelle Auswahl. Jeder
+                          Hinweis ist überprüfbar.
+                        </p>
+                      </div>
+                      <button
+                        className="button secondary small"
+                        onClick={() => setView("insights")}
+                      >
+                        Alle {exploration.insights.length} Insights
+                        <ArrowRight size={15} />
+                      </button>
+                    </div>
+                    <InsightFeed
+                      items={variedInsights(exploration.insights)}
+                      onExplore={exploreInsight}
+                      compact
+                    />
                     <div className="overview-grid">
                       <Card className="landscape-card">
                         <div className="card-heading">
@@ -1365,7 +1397,7 @@ export default function App() {
                         <div className="card-bottom">
                           <div className="legend">
                             <span>
-                              <i style={{ background: "#356f5b" }} />
+                              <i style={{ background: "#4e77c9" }} />
                               Farbe = Gruppe
                             </span>
                             <span>
@@ -1382,101 +1414,79 @@ export default function App() {
                           </button>
                         </div>
                       </Card>
-                      <Card className="insights-card">
+                      <Card className="insights-card exploration-guide">
                         <div className="card-heading">
                           <div>
-                            <span className="eyebrow">ERSTE ANHALTSPUNKTE</span>
-                            <h2>Ein genauerer Blick lohnt sich.</h2>
+                            <span className="eyebrow">
+                              VOM BEFUND ZUR PRÜFUNG
+                            </span>
+                            <h2>Entdecken. Verstehen. Weitergeben.</h2>
                           </div>
                           <Sparkles size={20} />
                         </div>
-                        {exploration.insights.length ? (
-                          exploration.insights.slice(0, 3).map((insight, i) => (
-                            <button
-                              className="insight"
-                              key={insight.title}
-                              onClick={() =>
-                                setView(
-                                  insight.kind === "anomaly"
-                                    ? "anomalies"
-                                    : insight.kind === "relation"
-                                      ? "relations"
-                                      : "data",
-                                )
-                              }
-                            >
-                              <span className={`insight-number n${i}`}>
-                                {String(i + 1).padStart(2, "0")}
-                              </span>
-                              <span>
-                                <strong>{insight.title}</strong>
-                                <p>{insight.detail}</p>
-                              </span>
-                              <ArrowUpRight size={16} />
-                            </button>
-                          ))
-                        ) : (
-                          <p className="small-note">
-                            Noch keine automatischen Hinweise. Erkunde
-                            Verteilungen oder vergleiche eigene Gruppen.
-                          </p>
-                        )}
+                        <button
+                          className="guide-step"
+                          onClick={() => setView("anomalies")}
+                        >
+                          <span>01</span>
+                          <div>
+                            <strong>Abweichungen begründen</strong>
+                            <p>
+                              Messwerte mit Median, Quartilen und ähnlichen
+                              Zeilen vergleichen.
+                            </p>
+                          </div>
+                          <ArrowUpRight size={17} />
+                        </button>
+                        <button
+                          className="guide-step"
+                          onClick={() => setView("groups")}
+                        >
+                          <span>02</span>
+                          <div>
+                            <strong>Gruppen auseinanderhalten</strong>
+                            <p>
+                              Verteilungen und Gruppenprofile im Zusammenhang
+                              untersuchen.
+                            </p>
+                          </div>
+                          <ArrowUpRight size={17} />
+                        </button>
+                        <div className="guide-step">
+                          <span>03</span>
+                          <div>
+                            <strong>Erkenntnisse übergeben</strong>
+                            <p>
+                              Bericht, Methoden und Zeilenbezug für die
+                              fachliche Weiteranalyse exportieren.
+                            </p>
+                          </div>
+                        </div>
                         <div className="insights-note">
-                          <CircleHelp size={14} />
-                          Anhaltspunkte für deine Untersuchung, keine
-                          abschließenden Bewertungen.
+                          <ShieldCheck size={14} />
+                          Deine Originaldaten bleiben unverändert.
                         </div>
                       </Card>
                     </div>
                     <div className="section-heading">
                       <div>
                         <h2>Deine Merkmale im Überblick</h2>
-                        <p>Verteilungen, Lücken und erste Kennzahlen.</p>
+                        <p>
+                          Sinnvoll beschriftete Verteilungen, Vergleichsbereiche
+                          und Datenabdeckung.
+                        </p>
                       </div>
                       <button
                         className="text-button"
                         onClick={() => setView("data")}
                       >
-                        Alle Daten ansehen
+                        Originaldaten ansehen
                         <ArrowRight size={16} />
                       </button>
                     </div>
                     <div className="profiles-grid">
-                      {exploration.profiles.slice(0, 12).map((profile) => (
-                        <Card key={profile.name} className="profile-card">
-                          <div className="profile-heading">
-                            <h3 title={profile.name}>{profile.name}</h3>
-                            <Badge>{roleLabels[profile.role]}</Badge>
-                          </div>
-                          <Distribution profile={profile} />
-                          <div className="profile-stats">
-                            {profile.role === "number" ? (
-                              <>
-                                <span>
-                                  Durchschnitt
-                                  <strong>{number(profile.mean, 2)}</strong>
-                                </span>
-                                <span>
-                                  Median
-                                  <strong>{number(profile.median, 2)}</strong>
-                                </span>
-                              </>
-                            ) : (
-                              <span>
-                                Verschiedene Werte
-                                <strong>{number(profile.unique, 0)}</strong>
-                              </span>
-                            )}
-                            <span>
-                              Fehlend
-                              <strong
-                                className={profile.missing ? "warm-text" : ""}
-                              >
-                                {number(profile.missing, 0)}
-                              </strong>
-                            </span>
-                          </div>
-                        </Card>
+                      {exploration.profiles.map((profile) => (
+                        <ProfileCard key={profile.name} profile={profile} />
                       ))}
                     </div>
                     {analysis.notices.length > 0 && (
@@ -1490,6 +1500,32 @@ export default function App() {
                         ))}
                       </details>
                     )}
+                  </>
+                )}
+
+                {view === "insights" && (
+                  <>
+                    <div className="findings-banner">
+                      <div>
+                        <span className="eyebrow">DEIN ANALYSEBRIEFING</span>
+                        <h2>
+                          {exploration.insights.length} überprüfbare
+                          Erkenntnisse
+                        </h2>
+                        <p>
+                          Aus {number(exploration.count, 0)} Zeilen deiner
+                          aktuellen Auswahl. Wähle ein Thema oder öffne die
+                          betroffenen Daten.
+                        </p>
+                      </div>
+                      <span className="findings-count">
+                        {String(exploration.insights.length).padStart(2, "0")}
+                      </span>
+                    </div>
+                    <InsightFeed
+                      items={exploration.insights}
+                      onExplore={exploreInsight}
+                    />
                   </>
                 )}
 
@@ -1546,12 +1582,12 @@ export default function App() {
                               >
                                 <stop
                                   offset="0%"
-                                  stopColor="#7da78e"
+                                  stopColor="#7e9dd7"
                                   stopOpacity={0.3}
                                 />
                                 <stop
                                   offset="100%"
-                                  stopColor="#7da78e"
+                                  stopColor="#7e9dd7"
                                   stopOpacity={0.01}
                                 />
                               </linearGradient>
@@ -1596,7 +1632,7 @@ export default function App() {
                             <Area
                               type="linear"
                               dataKey="value"
-                              stroke="#356f5b"
+                              stroke="#4e77c9"
                               strokeWidth={2.5}
                               fill="url(#trendFill)"
                               connectNulls={false}
@@ -1696,7 +1732,7 @@ export default function App() {
                                 />
                                 <Bar
                                   dataKey="value"
-                                  fill="#80a28a"
+                                  fill="#7e99cb"
                                   maxBarSize={80}
                                   radius={[5, 5, 0, 0]}
                                 />
@@ -1854,9 +1890,10 @@ export default function App() {
                             <thead>
                               <tr>
                                 <th>Zeile</th>
-                                {analysis.features.slice(0, 4).map((name) => (
+                                {analysis.features.slice(0, 2).map((name) => (
                                   <th key={name}>{name}</th>
                                 ))}
+                                <th>Warum auffällig?</th>
                                 <th>Score</th>
                                 <th />
                               </tr>
@@ -1872,11 +1909,21 @@ export default function App() {
                                       #{row.id + 1}
                                     </button>
                                   </td>
-                                  {analysis.features.slice(0, 4).map((name) => (
+                                  {analysis.features.slice(0, 2).map((name) => (
                                     <td key={name}>
                                       {formatValue(row.values[name])}
                                     </td>
                                   ))}
+                                  <td className="anomaly-reason-cell">
+                                    <p>{row.explanation?.summary}</p>
+                                    <button
+                                      className="text-button"
+                                      onClick={() => setInspected(row)}
+                                    >
+                                      Vergleichswerte ansehen
+                                      <ArrowUpRight size={13} />
+                                    </button>
+                                  </td>
                                   <td>
                                     <div className="score-bar">
                                       <span
@@ -2184,12 +2231,12 @@ export default function App() {
                                 "Zeilen",
                               ]}
                               labelFormatter={(value) =>
-                                `Klassenuntergrenze: ${value}`
+                                `${featureProfile.distribution_kind === "discrete" ? "Messwert" : "Wertebereich"}: ${value}`
                               }
                             />
                             <Bar
                               dataKey="count"
-                              fill="#81a58a"
+                              fill="#6e8bd1"
                               radius={[4, 4, 0, 0]}
                             />
                           </BarChart>
@@ -2275,6 +2322,13 @@ export default function App() {
               Anomaliescore<strong>{inspected.score.toFixed(3)}</strong>
             </span>
           </div>
+          {job && (
+            <ExplanationPanel
+              key={`${job}-${inspected.id}`}
+              job={job}
+              row={inspected}
+            />
+          )}
           <h3>Ursprüngliche Werte</h3>
           <dl>
             {Object.entries(inspected.values).map(([key, value]) => (

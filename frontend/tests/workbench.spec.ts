@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 test("demo, linked filters, analysis views, inspector and export", async ({
   page,
@@ -123,4 +124,95 @@ test("mobile start page fits and demo is usable", async ({ page }) => {
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+});
+
+test("semantic month charts, evidence feed, anomaly explanation and analyst report", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Mit Beispieldaten starten" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Was deine Daten zeigen" }),
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".discovery-card").first()).toBeVisible();
+  const dateCard = page.locator(".profile-calendar");
+  await expect(dateCard).toContainText("Jan 26");
+  await expect(dateCard).toContainText("Jun 26");
+  await expect(dateCard).toContainText("Zeilen pro Kalendermonat");
+  await expect(page.locator(".profile-identifier")).toContainText(
+    "verschiedene Kennungen",
+  );
+  await page.getByRole("button", { name: "Insights", exact: true }).click();
+  await expect(page.locator(".findings-banner")).toContainText(
+    "überprüfbare Erkenntnisse",
+  );
+  await page
+    .locator(".insight-family-filters")
+    .getByRole("button", { name: /^Zeit/ })
+    .click();
+  await expect(page.locator(".discovery-trend")).toHaveCount(1);
+  await expect(page.locator(".discovery-trend")).toContainText("April");
+  await page
+    .locator(".discovery-trend")
+    .getByText("Wie wurde das ermittelt?")
+    .click();
+  await expect(page.locator(".discovery-trend")).toContainText(
+    "keine Prognose",
+  );
+  await page
+    .getByRole("button", { name: "Auffälligkeiten", exact: true })
+    .click();
+  await expect(page.locator(".anomaly-reason-cell").first()).toContainText(
+    "Median",
+  );
+  await page.getByRole("button", { name: "#13", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Warum fällt diese Zeile auf?" }),
+  ).toBeVisible();
+  await expect(page.locator(".comparison-card").first()).toContainText(
+    "Umsatz",
+  );
+  await expect(page.locator(".comparison-card").first()).toContainText(
+    "Vergleichsmedian",
+  );
+  await expect(page.locator(".comparison-range").first()).toBeVisible();
+  await page.getByRole("button", { name: "Detailansicht schließen" }).click();
+  await page.locator(".report-menu summary").click();
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: /Vollständige Befunde/ }).click();
+  const file = await downloaded;
+  expect(file.suggestedFilename()).toBe("latentspace-insights.json");
+  const report = JSON.parse(await readFile((await file.path())!, "utf8"));
+  expect(report.dataset.rows).toBe(720);
+  expect(report.insights.length).toBeGreaterThan(5);
+  expect(
+    report.explained_anomalies[0].explanation.reasons.length,
+  ).toBeGreaterThan(0);
+  expect(report.dataset.fingerprint_sha256).toHaveLength(64);
+  expect(errors).toEqual([]);
+});
+
+test("zero-based month codes show month names instead of numeric indices", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Eigene Daten erkunden" }).click();
+  await page.getByLabel("Datendatei auswählen").setInputFiles({
+    name: "monate.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("Monat,Wert\n0,10\n1,20\n2,30\n1,25\n"),
+  });
+  await page
+    .getByRole("button", { name: "Analyse starten", exact: true })
+    .click();
+  await expect(page.locator(".profile-month_codes")).toContainText("Jan", {
+    timeout: 30000,
+  });
+  await expect(page.locator(".profile-month_codes")).toContainText("Feb");
+  await expect(page.locator(".profile-month_codes")).toContainText("Mär");
+  await expect(page.locator(".profile-month_codes")).toContainText(
+    "0 = Januar",
+  );
 });

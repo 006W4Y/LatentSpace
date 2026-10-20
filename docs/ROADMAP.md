@@ -4,9 +4,9 @@
 
 Eine große, zugängliche Toolbox für die Arbeit mit Daten. Menschen importieren eigene Dateien und untersuchen Trends, Gruppen, Auffälligkeiten, Zusammenhänge und einzelne Beobachtungen. Fachliche Fragen führen zu passenden Werkzeugen; Algorithmen bleiben nachvollziehbar einstellbar.
 
-Die Datenlandschaft ergänzt Zeitreihen, Tabellen und Diagramme. Erkenntnisse sollen sich in konkrete Auswahlen, Exporte und spätere Datenkorrekturen überführen lassen.
+Die Datenlandschaft ergänzt Zeitreihen, Tabellen und Diagramme. Erkenntnisse werden in überprüfbare Befunde, konkrete Auswahlen und Exporte überführt. LatentSpace verändert keine Originaldaten. Fachliche Bewertung, Bereinigung und weitere Verarbeitung übernimmt ein Analyst anhand der Ausgaben.
 
-## Implementiert in Version 0.1
+## Implementiert bis Version 0.2
 
 - Vollständiger Ablauf von CSV/XLSX über Rollenkorrektur bis zu realen Analysen und Export.
 - Lokale Speicherung und synthetischer Demodatensatz.
@@ -14,15 +14,20 @@ Die Datenlandschaft ergänzt Zeitreihen, Tabellen und Diagramme. Erkenntnisse so
 - PCA und UMAP, HDBSCAN und Isolation Forest auf separatem Merkmalsraum.
 - Gruppenprofile, Zeitaggregate, Pearson-Korrelation und Datenprofile.
 - Analyseparameter, lokaler Start, Docker-Grundlage und Tests.
+- Eigene Insight-Ansicht mit Zahlenbelegen, Methodik, Auswahlbezug und gezieltem Wechsel zur passenden Analyse.
+- Statistische Erklärungen für Auffälligkeiten: globale und lokale Vergleichswerte, Median, Quartile, Mindeststichprobe und Abstandsprüfung.
+- Semantische Verteilungen: Monatsnamen mit Jahr, Kategorien, diskrete Messwerte und unverzerrte Kennungsdarstellung.
+- Analystenberichte als Markdown und JSON mit Befunden, Erklärungen, Zeilenbezug und Datenfingerabdruck.
+- Professioneller Arbeitsbereich mit klarer visueller Hierarchie und lesbareren Beschriftungen.
 
 ## Als Nächstes: Alltagstauglichkeit
 
 1. Datentyp- und Einheitenprüfung erweitern: Prozent, Währung, Zeitzonen und explizite Datumsformate; Import mehrerer Excel-Blätter mit Auswahl.
-2. Datenbereinigung mit Vorschau: fehlende Werte, Duplikate und fehlerhafte Konvertierungen gezielt bearbeiten; Änderungen als neue Datenversion speichern.
+2. Weitere Erkenntnisse ergänzen: fehlende Werte und Duplikate fachlich einordnen, betroffene Zeilen referenzieren und konkrete Prüfaufträge exportieren. Keine Bearbeitung der Originaldaten.
 3. Resultate und Notizen dauerhaft speichern; gespeicherte Ansichten benennen, verwalten und löschen.
 4. Zeitbereiche direkt im Diagramm auswählen; robuste Trendkennzahlen, saisonale Muster und Veränderungspunkte ergänzen.
 5. Verteilungen zwischen selbst definierten Gruppen vergleichen; Effektgrößen und Stichprobengrößen verständlich darstellen.
-6. Verständliche Empfehlungen aus überprüfbaren Regeln ergänzen, abhängig von Datenart und Stichprobe.
+6. Befunde weiter priorisieren und fachlich kontextualisieren, abhängig von Datenart, Vergleichsbasis und Stichprobe; keine unbelegten Schlussfolgerungen.
 
 ## Danach: größere Toolbox
 
@@ -40,4 +45,4 @@ Erst nach Bedarfserprobung: Authentifizierung, getrennte Datenräume, Datenbankm
 
 ## Erfolg prüfen
 
-Mit echten Testnutzern beobachten: Können sie eine eigene Datei ohne Hilfe importieren, die Rollen korrekt festlegen, einen relevanten Befund überprüfen und die passenden Zeilen exportieren? Erst danach weitere Analyseverfahren ergänzen.
+Mit echten Testnutzern beobachten: Können sie eine eigene Datei ohne Hilfe importieren, die Rollen korrekt festlegen, einen Befund und seine Vergleichsbasis verstehen und einem Analysten die relevanten Zeilen samt Erklärung übergeben?
