@@ -1,0 +1,31 @@
+{
+  "name": "latentspace-web",
+  "version": "0.1.0",
+  "description": "Lokale interaktive Datenwerkstatt",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "npm run build && playwright test",
+    "format": "prettier --write src tests *.json *.ts *.mjs index.html",
+    "format:check": "prettier --check src tests *.json *.ts *.mjs index.html"
+  },
+  "type": "module",
+  "dependencies": {
+    "lucide-react": "1.59.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "recharts": "3.10.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "prettier": "3.6.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.4"
+  },
+  "private": true
+}
