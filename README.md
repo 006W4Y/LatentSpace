@@ -161,7 +161,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Die Browserprüfungen starten eine eigene Serverinstanz mit temporärer Datenablage. GitHub Actions führt Backendtests, Frontend-Build und die Chromium-Browserprüfungen aus. Bei fehlgeschlagenen Browserprüfungen werden Traces als CI-Artefakte aufbewahrt.
+Die Browserprüfungen starten eine eigene Serverinstanz mit temporärer Datenablage. GitHub Actions führt Backendtests, Frontend-Build und die Browserprüfungen aus. Der Browserjob nutzt den vorinstallierten Chrome des Ubuntu-24.04-Runners; lokal kann Playwright seinen eigenen Chromium verwenden. Bei fehlgeschlagenen Browserprüfungen werden Traces als CI-Artefakte aufbewahrt.
 
 Die Kontexttests importieren alle drei Beispiele als gewöhnliche CSV-Dateien, jeweils mit dem festen Demoseed und einem weiteren Seed. Sie prüfen nachvollziehbare Befunde, unveränderte Originalwerte, Berichte und die fehlende Zeitachse der Lernstudie. Zusätzliche Prüfungen benennen alle Spalten um und vergleichen die Analyseergebnisse. Das schützt vor einer Bindung an Handelsbegriffe; Zusätzlich gibt es unabhängige Zufalls- und Fehlwertkontrollen sowie eine reale Iris-CSV. Details, Quellen und Grenzen stehen in [docs/VALIDATION.md](docs/VALIDATION.md).
 

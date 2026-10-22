@@ -40,3 +40,5 @@ Geprüft werden normaler CSV-Import, unveränderte Originalwerte, drei Vergleich
 Die Browsertests decken die drei Demo-Kontexte, eigene CSV-Importe, Zellbelege hinter den ersten Modellmerkmalen, Tabellenseiten, feste Befundreferenzen, Vergleichszeilen, Notizen, vollständigen JSON-Export, Wiederherstellung gespeicherter Analysestände, Duplikatschlüssel und die Iris-Datei ab. Die Befundansicht wird auch bei 390 Pixeln Breite geprüft.
 
 Diese Regressionen sichern konkrete Erwartungen ab. Weitere reale Dateien aus mehreren Branchen, systematische Nullsimulationen über viele Seeds und Messungen von Laufzeit, Sensitivität und übersehenen Mustern sollen die nächste Ausbaustufe begleiten. Projektionsverfahren und Prognosen werden danach priorisiert.
+
+Der CI-Browserjob verwendet den vorinstallierten Chrome des GitHub-Ubuntu-24.04-Runners über den bereits unterstützten Playwright-Executable-Pfad. So benötigt der Job keine zusätzliche apt- oder Browser-CDN-Installation. Grundlage: [GitHub Runner-Image](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md). Die lokalen Prüfungen verwenden Chromium; beide Wege führen dieselben Tests aus.
