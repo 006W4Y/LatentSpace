@@ -84,7 +84,7 @@ export default function InsightFeed({
           const family = families[item.kind];
           return (
             <article
-              key={item.id}
+              key={item.token}
               className={`discovery-card discovery-${item.kind}`}
             >
               <div className="discovery-top">

@@ -9,8 +9,6 @@ import {
   BarChart3,
   Bookmark,
   Check,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   CircleHelp,
   Database,
@@ -49,13 +47,10 @@ import { api, clusterColor, download, number, post, roleLabels } from "./api";
 import type {
   Analysis,
   AnalysisConfig,
-  Column,
   DataRow,
   Dataset,
   Demo,
-  Exploration,
   ExploreConfig,
-  Role,
 } from "./api";
 import Landscape from "./components/Landscape";
 import InsightFeed, { variedInsights } from "./components/InsightFeed";
@@ -65,7 +60,16 @@ import ReportActions from "./components/ReportActions";
 import DemoGallery from "./components/DemoGallery";
 import EvidenceValue from "./components/EvidenceValue";
 import useRowExplanation from "./useRowExplanation";
-import type { Insight } from "./api";
+import type { Insight, InvestigationSource, ResearchRecord } from "./api";
+import InvestigationPanel from "./components/InvestigationPanel";
+import ConfigDialog from "./components/ConfigDialog";
+import Illustration from "./components/Illustration";
+import Field from "./components/Field";
+import DataTableView from "./components/DataTableView";
+import DiagnosticControls from "./components/DiagnosticControls";
+import ResearchShelf from "./components/ResearchShelf";
+import useExploration from "./hooks/useExploration";
+import useResearch from "./hooks/useResearch";
 
 type View =
   | "overview"
@@ -133,6 +137,7 @@ const navigation: {
   },
 ];
 const emptyExplore: ExploreConfig = {
+  duplicate_keys: [],
   query: "",
   category_column: null,
   category_value: null,
@@ -180,14 +185,6 @@ function Badge({
 }) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
-}
 function Metric({
   label,
   value,
@@ -210,318 +207,15 @@ function Metric({
     </Card>
   );
 }
-function Illustration() {
-  const dots = useMemo(
-    () =>
-      Array.from({ length: 135 }, (_, i) => {
-        const cluster = i % 3;
-        const angle = i * 2.39996;
-        const radius = Math.sqrt(i / 3) * 10;
-        return {
-          x:
-            [135, 280, 395][cluster] +
-            Math.cos(angle) * radius * [1, 0.8, 1.1][cluster],
-          y: [180, 95, 220][cluster] + Math.sin(angle) * radius * 0.75,
-          color: ["#8fae84", "#dca67a", "#a7a0c7"][cluster],
-        };
-      }),
-    [],
-  );
-  return (
-    <svg
-      className="illustration"
-      viewBox="0 0 540 330"
-      aria-label="Illustration einer Datenlandschaft"
-    >
-      <defs>
-        <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
-          <circle cx="1" cy="1" r="1" fill="#c4d0bf" />
-        </pattern>
-      </defs>
-      <rect width="540" height="330" fill="url(#grid)" />
-      <ellipse cx="135" cy="180" rx="94" ry="74" fill="#e6eedf" />
-      <ellipse cx="280" cy="95" rx="83" ry="64" fill="#f3e8d9" />
-      <ellipse cx="395" cy="220" rx="97" ry="78" fill="#eae7ee" />
-      {dots.map((dot, i) => (
-        <circle
-          key={i}
-          cx={dot.x}
-          cy={dot.y}
-          r={i % 9 === 0 ? 4.5 : 3}
-          fill={dot.color}
-          opacity={0.85}
-        />
-      ))}
-      <circle cx="270" cy="255" r="7" fill="#d28058" />
-      <circle
-        cx="270"
-        cy="255"
-        r="13"
-        stroke="#d28058"
-        fill="none"
-        opacity="0.4"
-      />
-      <rect
-        x="290"
-        y="250"
-        width="142"
-        height="46"
-        rx="10"
-        fill="white"
-        stroke="#dfe4da"
-      />
-      <text x="304" y="270" fontSize="11" fontWeight="600" fill="#263c31">
-        Neue Perspektiven.
-      </text>
-      <text x="304" y="286" fontSize="10" fill="#7c8679">
-        Illustrative Datenansicht
-      </text>
-    </svg>
-  );
-}
-
-function ConfigDialog({
-  dataset,
-  initial,
-  busy,
-  onClose,
-  onRun,
-}: {
-  dataset: Dataset;
-  initial?: AnalysisConfig;
-  busy: boolean;
-  onClose: () => void;
-  onRun: (config: AnalysisConfig) => void;
-}) {
-  const [roles, setRoles] = useState<Record<string, Role>>(
-    initial?.roles ??
-      Object.fromEntries(dataset.columns.map((c) => [c.name, c.role])),
-  );
-  const [features, setFeatures] = useState<string[]>(
-    initial?.features ??
-      dataset.columns
-        .filter((c) => c.role === "number")
-        .map((c) => c.name)
-        .slice(0, 40),
-  );
-  const [projection, setProjection] = useState<"pca" | "umap">(
-    initial?.projection ?? "pca",
-  );
-  const [minSize, setMinSize] = useState(initial?.min_cluster_size ?? 20);
-  const close = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    close.current?.focus();
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !busy) onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [onClose, busy]);
-  function changeRole(column: Column, role: Role) {
-    setRoles((previous) => ({ ...previous, [column.name]: role }));
-    setFeatures((previous) =>
-      role === "number"
-        ? Array.from(new Set([...previous, column.name])).slice(0, 40)
-        : previous.filter((name) => name !== column.name),
-    );
-  }
-  return (
-    <div className="modal-backdrop">
-      <section
-        className="modal config-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="config-title"
-        onKeyDown={(event) => {
-          if (event.key !== "Tab") return;
-          const focusable = Array.from(
-            event.currentTarget.querySelectorAll<HTMLElement>(
-              'button:not(:disabled), select:not(:disabled), input:not(:disabled), [tabindex="0"]',
-            ),
-          );
-          const first = focusable[0],
-            last = focusable.at(-1);
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last?.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first?.focus();
-          }
-        }}
-      >
-        <div className="modal-heading">
-          <div>
-            <span className="eyebrow">DATEN VORBEREITEN</span>
-            <h2 id="config-title">Einmal prüfen. Dann entdecken.</h2>
-            <p>
-              {dataset.name} · {number(dataset.row_count, 0)} Zeilen
-            </p>
-          </div>
-          <button
-            ref={close}
-            className="icon-button"
-            aria-label="Schließen"
-            onClick={onClose}
-            disabled={busy}
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <div className="modal-content">
-          <div className="info-box">
-            <CircleHelp size={18} />
-            <p>
-              Eine Kennung wie eine Kundennummer ist kein Messwert. Prüfe die
-              vorgeschlagenen Rollen. Angehakte Messwerte fließen in Cluster,
-              Anomalien und die Landschaft ein.
-            </p>
-          </div>
-          {dataset.notices.map((notice) => (
-            <p className="small-note" key={notice}>
-              {notice}
-            </p>
-          ))}
-          <div className="table-scroll">
-            <table className="config-table">
-              <thead>
-                <tr>
-                  <th>Spalte</th>
-                  <th>Beispielwerte</th>
-                  <th>Rolle</th>
-                  <th>Modellanalyse</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dataset.columns.map((column) => (
-                  <tr key={column.name}>
-                    <td>
-                      <strong>{column.name}</strong>
-                      <small>
-                        {column.missing} fehlend · {column.unique} verschieden
-                      </small>
-                    </td>
-                    <td className="example-values">
-                      {column.examples.map(formatValue).join(" · ") || "leer"}
-                    </td>
-                    <td>
-                      <select
-                        aria-label={`Rolle für ${column.name}`}
-                        value={roles[column.name]}
-                        onChange={(e) =>
-                          changeRole(column, e.target.value as Role)
-                        }
-                      >
-                        {Object.entries(roleLabels).map(([key, label]) => (
-                          <option key={key} value={key}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        type="checkbox"
-                        aria-label={`${column.name} in Modellanalyse verwenden`}
-                        checked={features.includes(column.name)}
-                        disabled={
-                          roles[column.name] !== "number" ||
-                          (!features.includes(column.name) &&
-                            features.length >= 40)
-                        }
-                        onChange={(e) =>
-                          setFeatures((previous) =>
-                            e.target.checked
-                              ? [...previous, column.name]
-                              : previous.filter((name) => name !== column.name),
-                          )
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="form-row">
-            <Field label="Landschaft berechnen">
-              <select
-                value={projection}
-                onChange={(e) =>
-                  setProjection(e.target.value as "pca" | "umap")
-                }
-              >
-                <option value="pca">PCA · schneller Einstieg</option>
-                <option value="umap">UMAP · lokale Ähnlichkeiten</option>
-              </select>
-            </Field>
-            <Field label="Mindestgröße einer Gruppe">
-              <input
-                type="number"
-                min={3}
-                max={1000}
-                value={minSize}
-                onChange={(e) => setMinSize(Number(e.target.value))}
-              />
-            </Field>
-          </div>
-          <p className="small-note">
-            Fehlende Messwerte werden ausschließlich für die Modellanalyse mit
-            dem Median ergänzt. UMAP kann beim ersten Start länger dauern.
-            Maximal 40 Modellmerkmale.
-          </p>
-          {!features.length &&
-            dataset.columns.some((c) => roles[c.name] === "number") && (
-              <p className="error-inline">
-                Wähle mindestens einen Messwert für die Modellanalyse.
-              </p>
-            )}
-        </div>
-        <div className="modal-footer">
-          <button
-            className="button secondary"
-            onClick={onClose}
-            disabled={busy}
-          >
-            Abbrechen
-          </button>
-          <button
-            className="button primary"
-            disabled={
-              busy ||
-              !Number.isFinite(minSize) ||
-              minSize < 3 ||
-              minSize > 1000 ||
-              (!features.length && Object.values(roles).includes("number"))
-            }
-            onClick={() =>
-              onRun({ roles, features, projection, min_cluster_size: minSize })
-            }
-          >
-            {busy ? (
-              <LoaderCircle className="spin" size={17} />
-            ) : (
-              <Sparkles size={17} />
-            )}
-            Analyse starten
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 export default function App() {
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [demos, setDemos] = useState<Demo[]>([]);
   const [dataset, setDataset] = useState<Dataset | null>(null);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [job, setJob] = useState<string | null>(null);
-  const [exploration, setExploration] = useState<Exploration | null>(null);
   const [config, setConfig] = useState<ExploreConfig>(emptyExplore);
   const [view, setView] = useState<View>("overview");
   const [busy, setBusy] = useState(false);
-  const [exploring, setExploring] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -530,7 +224,7 @@ export default function App() {
   const [decimal, setDecimal] = useState(".");
   const [inspected, setInspected] = useState<DataRow | null>(null);
   const [chartFeature, setChartFeature] = useState("");
-  const [saved, setSaved] = useState<
+  const [legacySaved, setLegacySaved] = useState<
     { name: string; dataset: string; config: ExploreConfig; view: View }[]
   >(() => {
     try {
@@ -540,9 +234,31 @@ export default function App() {
     }
   });
   const [showHelp, setShowHelp] = useState(false);
+  const [investigation, setInvestigation] =
+    useState<InvestigationSource | null>(null);
+  const closeInvestigation = useCallback(() => setInvestigation(null), []);
+  const { records, refresh: refreshResearch } = useResearch(
+    dataset?.id,
+    setError,
+  );
+  const saved = [
+    ...records.filter((record) => record.kind === "session"),
+    ...legacySaved.map((item, i) => ({
+      ...item,
+      id: `legacy-${i}`,
+      kind: "session",
+      notes: "",
+      created_at: "",
+    })),
+  ];
+  const { exploration, exploring, clearExploration } = useExploration(
+    job,
+    config,
+    view === "data",
+    setError,
+  );
   const { explanation: inspectedExplanation, error: explanationError } =
     useRowExplanation(job, inspected);
-  const explainPage = view === "data";
   const generation = useRef(0);
   const uploadInput = useRef<HTMLInputElement>(null);
   const refreshDatasets = useCallback(
@@ -566,59 +282,28 @@ export default function App() {
     return () => clearTimeout(timeout);
   }, [message]);
 
-  useEffect(() => {
-    if (!job) return;
-    const controller = new AbortController();
-    let active = true;
-    const timeout = setTimeout(() => {
-      setExploring(true);
-      post<Exploration>(
-        `/analyses/${job}/explore`,
-        { ...config, explain_page: explainPage },
-        controller.signal,
-      )
-        .then((result) => {
-          if (active) {
-            setExploration(result);
-            setExploring(false);
-          }
-        })
-        .catch((e) => {
-          if (active && e.name !== "AbortError") {
-            setError(e.message);
-            setExploring(false);
-          }
-        });
-    }, 200);
-    return () => {
-      active = false;
-      clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [job, config, explainPage]);
-
   function exploreInsight(insight: Insight) {
-    const { view: target, ...settings } = insight.action;
-    update({
-      ...settings,
-      ...(insight.row_ids.length ? { row_ids: insight.row_ids } : {}),
-    });
-    setView(target);
+    if (job) setInvestigation({ job, token: insight.token });
   }
 
   function update(patch: Partial<ExploreConfig>) {
     setConfig((previous) => ({ ...previous, ...patch, page: patch.page ?? 0 }));
   }
-  async function run(selected: Dataset, options?: AnalysisConfig) {
+  async function run(
+    selected: Dataset,
+    options?: AnalysisConfig,
+    restore?: { config: ExploreConfig; view: View },
+  ) {
     const current = ++generation.current;
     setBusy(true);
     setError("");
     setPending(null);
+    setInvestigation(null);
     setShowImport(false);
     setDataset(selected);
     setInspected(null);
     setAnalysis(null);
-    setExploration(null);
+    clearExploration();
     setJob(null);
     const settings = options ?? {
       roles: Object.fromEntries(selected.columns.map((c) => [c.name, c.role])),
@@ -650,16 +335,18 @@ export default function App() {
           const groups = Object.keys(result.roles).filter(
             (name) => result.roles[name] === "category",
           );
-          setConfig({
-            ...emptyExplore,
-            date_column: dates[0] ?? null,
-            value_column: result.numeric_columns[0] ?? null,
-            group_column: groups[0] ?? null,
-          });
+          setConfig(
+            restore?.config ?? {
+              ...emptyExplore,
+              date_column: dates[0] ?? null,
+              value_column: result.numeric_columns[0] ?? null,
+              group_column: groups[0] ?? null,
+            },
+          );
           setChartFeature(result.numeric_columns[0] ?? "");
           setAnalysis(result);
           setJob(started.id);
-          setView("overview");
+          setView(restore?.view ?? "overview");
           setBusy(false);
           return;
         }
@@ -736,20 +423,22 @@ export default function App() {
   }
   async function removeDataset(item: Dataset) {
     if (
-      !window.confirm(`„${item.name}“ und zugehörige Analysen lokal löschen?`)
+      !window.confirm(
+        `„${item.name}“ samt Analysen, gespeicherten Befunden und Notizen lokal löschen?`,
+      )
     )
       return;
     try {
       await api(`/datasets/${item.id}`, { method: "DELETE" });
-      const next = saved.filter((s) => s.dataset !== item.id);
-      setSaved(next);
+      const next = legacySaved.filter((s) => s.dataset !== item.id);
+      setLegacySaved(next);
       localStorage.setItem("latentspace-views", JSON.stringify(next));
       if (dataset?.id === item.id) {
         generation.current++;
         setDataset(null);
         setAnalysis(null);
         setJob(null);
-        setExploration(null);
+        clearExploration();
         setInspected(null);
       }
       await refreshDatasets();
@@ -757,25 +446,31 @@ export default function App() {
       setError((e as Error).message);
     }
   }
-  function saveView() {
-    if (!dataset) return;
+  async function saveView() {
+    if (!dataset || !job) return;
     const name = window
       .prompt(
-        "Wie soll diese Ansicht heißen?",
-        `${navigation.find((v) => v.id === view)?.label} · ${dataset.name}`,
+        "Wie soll dieser Analysestand heißen?",
+        `${navigation.find((item) => item.id === view)?.label} · ${dataset.name}`,
       )
       ?.trim();
     if (!name) return;
-    const next = [...saved, { name, dataset: dataset.id, config, view }].slice(
-      -20,
-    );
     try {
-      localStorage.setItem("latentspace-views", JSON.stringify(next));
-      setSaved(next);
-      setMessage("Ansicht in diesem Browser gespeichert.");
-    } catch {
-      setError("Die Ansicht konnte im Browser nicht gespeichert werden.");
+      await post(`/analyses/${job}/sessions`, { name, config, view });
+      await refreshResearch();
+      setMessage(
+        "Analysestand mit Parametern und Filtern dauerhaft gespeichert.",
+      );
+    } catch (error) {
+      setError((error as Error).message);
     }
+  }
+  async function restoreSession(item: ResearchRecord) {
+    if (!dataset || !item.config || !item.view || !item.analysis_config) return;
+    await run(dataset, item.analysis_config, {
+      config: { ...emptyExplore, ...item.config },
+      view: item.view,
+    });
   }
 
   const activeNavigation = navigation.find((v) => v.id === view)!;
@@ -938,8 +633,12 @@ export default function App() {
                   key={i}
                   className="saved-view"
                   onClick={() => {
-                    setConfig(item.config);
-                    setView(item.view);
+                    if ("analysis_config" in item)
+                      void restoreSession(item as ResearchRecord);
+                    else if (item.config && item.view) {
+                      setConfig({ ...emptyExplore, ...item.config });
+                      setView(item.view);
+                    }
                   }}
                 >
                   <Bookmark size={14} />
@@ -964,7 +663,7 @@ export default function App() {
             <ArrowUpRight size={14} />
           </button>
           <span className="version">
-            LATENTSPACE <span>v0.2 · INSIGHTS</span>
+            LATENTSPACE <span>v0.3 · BEFUNDWERKSTATT</span>
           </span>
         </div>
       </aside>
@@ -1207,7 +906,7 @@ export default function App() {
                 <button
                   className="button secondary small"
                   onClick={saveView}
-                  title="Filter und Ansicht im Browser speichern"
+                  title="Analyseparameter, Filter und Ansicht dauerhaft speichern"
                 >
                   <Bookmark size={15} />
                   Ansicht merken
@@ -1546,9 +1245,21 @@ export default function App() {
                         {String(exploration.insights.length).padStart(2, "0")}
                       </span>
                     </div>
+                    <DiagnosticControls
+                      coverage={exploration.coverage}
+                      columns={Object.keys(analysis.roles)}
+                      keys={config.duplicate_keys}
+                      onKeys={(duplicate_keys) => update({ duplicate_keys })}
+                    />
                     <InsightFeed
                       items={exploration.insights}
                       onExplore={exploreInsight}
+                    />
+                    <ResearchShelf
+                      records={records}
+                      onOpen={(savedId) => setInvestigation({ savedId })}
+                      onRefresh={() => void refreshResearch()}
+                      onError={setError}
                     />
                   </>
                 )}
@@ -2144,143 +1855,16 @@ export default function App() {
                 )}
 
                 {view === "data" && (
-                  <>
-                    <Card>
-                      <div className="card-heading">
-                        <div>
-                          <h2>Deine Daten, Zeile für Zeile</h2>
-                          <p>
-                            Originalwerte · Seite {config.page + 1} von{" "}
-                            {Math.max(1, Math.ceil(selectedCount / 50))}
-                          </p>
-                        </div>
-                        <button
-                          className="button secondary small"
-                          disabled={exporting}
-                          onClick={() => void exportCsv()}
-                        >
-                          <ArrowDownToLine size={15} />
-                          Auswahl exportieren
-                        </button>
-                      </div>
-                      <p className="value-evidence-legend">
-                        <span aria-hidden="true" />
-                        Orange markiert konkrete Wertabweichungen mit
-                        Vergleichsmedian. „Nur Modellmarkierung“ bedeutet:
-                        Modellmarkierung ohne belegten Einzelwert. Werte
-                        anklicken, um Prüfregel und Vergleichsbasis zu sehen.
-                      </p>
-                      {exploration.rows.length ? (
-                        <div className="table-scroll">
-                          <table className="data-table">
-                            <thead>
-                              <tr>
-                                <th>Zeile</th>
-                                <th>Status</th>
-                                {Object.keys(analysis.roles).map((name) => (
-                                  <th key={name}>{name}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {exploration.rows.map((row) => (
-                                <tr
-                                  key={row.id}
-                                  className={
-                                    inspected?.id === row.id
-                                      ? "selected-row"
-                                      : ""
-                                  }
-                                >
-                                  <td>
-                                    <button
-                                      className="row-link"
-                                      onClick={() => setInspected(row)}
-                                    >
-                                      #{row.id + 1}
-                                    </button>
-                                  </td>
-                                  <td>
-                                    {row.anomaly ? (
-                                      <div className="row-evidence-status">
-                                        <Badge tone="orange">Auffällig</Badge>
-                                        <small>
-                                          {row.explanation
-                                            ? row.explanation.reasons.length
-                                              ? `${row.explanation.reasons.length} Wert${row.explanation.reasons.length === 1 ? "" : "e"} markiert`
-                                              : "Nur Modellmarkierung · kein Einzelwert belegt"
-                                            : "Wertprüfung wird geladen …"}
-                                        </small>
-                                      </div>
-                                    ) : (
-                                      <span className="normal-status">
-                                        Unmarkiert
-                                      </span>
-                                    )}
-                                  </td>
-                                  {Object.keys(analysis.roles).map((name) => {
-                                    const reason =
-                                      row.explanation?.reasons.find(
-                                        (item) => item.feature === name,
-                                      );
-                                    return (
-                                      <td
-                                        key={name}
-                                        data-feature={name}
-                                        className={
-                                          reason ? "evidence-cell" : ""
-                                        }
-                                        title={String(row.values[name] ?? "")}
-                                      >
-                                        {reason ? (
-                                          <EvidenceValue
-                                            reason={reason}
-                                            onInspect={() => setInspected(row)}
-                                          >
-                                            {formatValue(row.values[name])}
-                                          </EvidenceValue>
-                                        ) : (
-                                          formatValue(row.values[name])
-                                        )}
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <Empty title="Keine Zeilen in dieser Auswahl.">
-                          Setze einen Filter zurück, um mehr Daten zu sehen.
-                        </Empty>
-                      )}
-                      <div className="pagination">
-                        <span>
-                          {number(selectedCount, 0)} Zeilen in deiner Auswahl
-                        </span>
-                        <div>
-                          <button
-                            className="icon-button"
-                            aria-label="Vorherige Seite"
-                            disabled={config.page === 0}
-                            onClick={() => update({ page: config.page - 1 })}
-                          >
-                            <ChevronLeft size={18} />
-                          </button>
-                          <span>{config.page + 1}</span>
-                          <button
-                            className="icon-button"
-                            aria-label="Nächste Seite"
-                            disabled={(config.page + 1) * 50 >= selectedCount}
-                            onClick={() => update({ page: config.page + 1 })}
-                          >
-                            <ChevronRight size={18} />
-                          </button>
-                        </div>
-                      </div>
-                    </Card>
-                  </>
+                  <DataTableView
+                    exploration={exploration}
+                    roles={analysis.roles}
+                    inspectedId={inspected?.id}
+                    page={config.page}
+                    exporting={exporting}
+                    onInspect={setInspected}
+                    onPage={(page) => update({ page })}
+                    onExportCsv={exportCsv}
+                  />
                 )}
 
                 {view === "overview" && numeric.length > 0 && (
@@ -2379,6 +1963,19 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {investigation && (
+        <InvestigationPanel
+          key={
+            "savedId" in investigation
+              ? investigation.savedId
+              : investigation.token
+          }
+          source={investigation}
+          onClose={closeInvestigation}
+          onSaved={() => void refreshResearch()}
+        />
+      )}
 
       {inspected && analysis && (
         <aside className="inspector">

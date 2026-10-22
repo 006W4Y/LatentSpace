@@ -8,6 +8,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Literal
+from pydantic import BaseModel, Field
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -19,8 +20,10 @@ from .data import MAX_BYTES, delete_dataset, demo_dataset, import_file, list_dat
 from .demos import demo_catalog
 from .explanations import explain_row
 from .reports import build_report, markdown_report
+from .findings import require_finding, investigate, finding_report
+from . import research
 
-app = FastAPI(title="LatentSpace", version="0.2.0")
+app = FastAPI(title="LatentSpace", version="0.3.0")
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="latentspace")
 jobs: dict[str, dict] = {}
 lock = threading.Lock()
@@ -29,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.2.0"}
+    return {"status": "ok", "version": "0.3.0"}
 
 
 @app.get("/api/datasets")
@@ -77,6 +80,7 @@ def remove(dataset_id: str):
             raise HTTPException(409, "Bitte die laufende Analyse abwarten.")
         try:
             delete_dataset(dataset_id)
+            research.delete_for(dataset_id)
         except KeyError as exc:
             raise HTTPException(404, "Datensatz nicht gefunden.") from exc
         for job_id in [key for key, job in jobs.items() if job["dataset_id"] == dataset_id]:
@@ -188,6 +192,119 @@ def report(job_id: str, request: ExploreRequest, format: str = "markdown"):
     if format == "json":
         return JSONResponse(data, headers={"Content-Disposition": 'attachment; filename="latentspace-insights.json"'})
     return StreamingResponse(io.BytesIO(markdown_report(data).encode("utf-8")), media_type="text/markdown", headers={"Content-Disposition": 'attachment; filename="latentspace-insights.md"'})
+
+
+class InvestigationRequest(BaseModel):
+    mode: Literal["affected", "comparison", "reference"] = "affected"
+    page: int = Field(default=0, ge=0, le=400)
+    column: str | None = None
+
+
+class SaveFindingRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=300)
+    notes: str = Field(default="", max_length=10000)
+
+
+class EditResearchRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=300)
+    notes: str | None = Field(default=None, max_length=10000)
+
+
+class SaveSessionRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    config: ExploreRequest
+    view: Literal["overview", "insights", "trends", "groups", "anomalies", "relations", "landscape", "data"]
+
+
+def research_error(exc):
+    return HTTPException(404 if isinstance(exc, KeyError) else 422, str(exc).strip("'"))
+
+
+@app.post("/api/analyses/{job_id}/findings/{token}/investigate")
+def finding_investigation(job_id: str, token: str, request: InvestigationRequest):
+    try:
+        result = require_job(job_id, done=True)["result"]
+        return investigate(result, require_finding(result, token), **request.model_dump())
+    except (KeyError, ValueError) as exc:
+        raise research_error(exc) from exc
+
+
+@app.post("/api/analyses/{job_id}/findings/{token}/save", status_code=201)
+def save_finding(job_id: str, token: str, request: SaveFindingRequest):
+    try:
+        result = require_job(job_id, done=True)["result"]
+        snapshot = require_finding(result, token)
+        return research.save(result["dataset_id"], "finding", {"name": request.name or snapshot["finding"]["title"], "notes": request.notes, "snapshot": snapshot})
+    except (KeyError, ValueError) as exc:
+        raise research_error(exc) from exc
+
+
+@app.post("/api/analyses/{job_id}/sessions", status_code=201)
+def save_session(job_id: str, request: SaveSessionRequest):
+    try:
+        result = require_job(job_id, done=True)["result"]
+        explore(result, request.config)  # Validate filters and column roles before persisting.
+        return research.save(result["dataset_id"], "session", {"name": request.name, "config": request.config.model_dump(), "view": request.view,
+                             "analysis_config": {**result["config"], "roles": result["roles"]}, "notes": "", "versions": result["versions"]})
+    except (KeyError, ValueError) as exc:
+        raise research_error(exc) from exc
+
+
+@app.get("/api/datasets/{dataset_id}/research")
+def list_research(dataset_id: str):
+    require_dataset(dataset_id)
+    return research.list_for(dataset_id)
+
+
+@app.patch("/api/research/{record_id}")
+def edit_research(record_id: str, request: EditResearchRequest):
+    try:
+        return research.update(record_id, **request.model_dump())
+    except KeyError as exc:
+        raise research_error(exc) from exc
+
+
+@app.delete("/api/research/{record_id}", status_code=204)
+def delete_research(record_id: str):
+    try:
+        research.delete(record_id)
+    except KeyError as exc:
+        raise research_error(exc) from exc
+
+
+@app.post("/api/research/{record_id}/investigate")
+def saved_investigation(record_id: str, request: InvestigationRequest):
+    try:
+        record = research.get(record_id)
+        if record["kind"] != "finding":
+            raise ValueError("Dieser Eintrag ist eine Analyseansicht, kein Befund.")
+        result, snapshot = research.restore_finding(record)
+        return {**investigate(result, snapshot, **request.model_dump()), "saved_id": record_id, "notes": record.get("notes", ""), "saved_name": record["name"]}
+    except (KeyError, ValueError) as exc:
+        raise research_error(exc) from exc
+
+
+@app.post("/api/analyses/{job_id}/findings/{token}/report")
+def export_finding(job_id: str, token: str, request: EditResearchRequest | None = None):
+    request = request or EditResearchRequest()
+    try:
+        result = require_job(job_id, done=True)["result"]
+        return JSONResponse({**finding_report(result, require_finding(result, token), request.notes or ""), "name": request.name})
+    except (KeyError, ValueError) as exc:
+        raise research_error(exc) from exc
+
+
+@app.post("/api/research/{record_id}/report")
+def export_saved_finding(record_id: str, request: EditResearchRequest | None = None):
+    request = request or EditResearchRequest()
+    try:
+        record = research.get(record_id)
+        if record["kind"] != "finding":
+            raise ValueError("Dieser Eintrag ist kein Befund.")
+        result, snapshot = research.restore_finding(record)
+        return JSONResponse({**finding_report(result, snapshot, request.notes if request.notes is not None else record.get("notes", "")), "name": request.name or record["name"]})
+    except (KeyError, ValueError) as exc:
+        raise research_error(exc) from exc
 
 
 FRONTEND = Path(__file__).resolve().parents[2] / "frontend" / "dist"

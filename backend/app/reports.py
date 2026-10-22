@@ -12,7 +12,7 @@ def build_report(result: dict, request: ExploreRequest) -> dict:
     exploration = explore(result, request)
     source = json.dumps([row["values"] for row in result["rows"]], ensure_ascii=False, sort_keys=True).encode()
     return {
-        "report_version": "1.0", "created_at": datetime.now(timezone.utc).isoformat(),
+        "report_version": "2.0", "created_at": datetime.now(timezone.utc).isoformat(),
         "dataset": {"id": result["dataset_id"], "name": result["name"], "rows": len(result["rows"]), "fingerprint_sha256": hashlib.sha256(source).hexdigest()},
         "selection": {"count": exploration["count"], "row_ids": exploration["filtered_ids"], "filters": request.model_dump()},
         "analysis": {"config": result["config"], "seed": result["seed"], "versions": result["versions"], "features": result["features"]},

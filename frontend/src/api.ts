@@ -91,6 +91,11 @@ export type Insight = {
   };
   limitation: string;
   row_ids: number[];
+  token: string;
+  columns: string[];
+  cell_evidence: CellRule[];
+  comparison_groups: Cohort[];
+  reference: { id: string; count: number; label: string };
 };
 export type AnalysisConfig = {
   roles: Record<string, Role>;
@@ -115,6 +120,7 @@ export type Analysis = {
   versions: Record<string, string>;
 };
 export type ExploreConfig = {
+  duplicate_keys: string[];
   query: string;
   category_column: string | null;
   category_value: string | null;
@@ -159,6 +165,24 @@ export type Profile = {
   }[];
 };
 export type Exploration = {
+  coverage: {
+    columns_checked: number;
+    numeric_pairs_tested: number;
+    group_measure_pairs: number;
+    date_measure_pairs: number;
+    duplicate_check: {
+      keys: string[];
+      complete: number;
+      duplicate_rows: number;
+      skipped: number;
+    };
+    numeric_columns: number;
+    category_columns: number;
+    date_columns: number;
+    candidates: number;
+    displayed_limit: number;
+    note: string;
+  };
   count: number;
   total: number;
   filtered_ids: number[];
@@ -256,3 +280,97 @@ export function download(blob: Blob, name: string) {
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
+
+export type CellRule = {
+  column: string;
+  kind: "iqr" | "missing" | "duplicate" | "combination";
+  rule: string;
+  reference_n: number;
+  median?: number;
+  q1?: number;
+  q3?: number;
+  lower?: number;
+  upper?: number;
+};
+export type Cohort = {
+  label: string;
+  count: number;
+  missing?: number;
+  rate?: number;
+  correlation?: number;
+  median?: number;
+  mean?: number;
+};
+export type InvestigationSource =
+  | { job: string; token: string }
+  | { savedId: string };
+export type ResearchRecord = {
+  id: string;
+  dataset: string;
+  kind: "finding" | "session";
+  name: string;
+  notes: string;
+  created_at: string;
+  config?: ExploreConfig;
+  view?: View;
+  analysis_config?: AnalysisConfig;
+};
+export type View =
+  | "overview"
+  | "insights"
+  | "trends"
+  | "groups"
+  | "anomalies"
+  | "relations"
+  | "landscape"
+  | "data";
+export type Investigation = {
+  finding: Insight;
+  mode: "affected" | "comparison" | "reference";
+  page: number;
+  count: number;
+  rows: {
+    id: number;
+    values: Record<string, Value>;
+    anomaly: boolean;
+    finding_evidence: Record<string, CellRule>;
+  }[];
+  column: string;
+  columns: string[];
+  all_columns: string[];
+  role: Role;
+  reference_count: number;
+  reference_row_ids: number[];
+  affected_count: number;
+  comparison_count: number;
+  excluded_comparison_count: number;
+  summaries: {
+    label: string;
+    count: number;
+    missing: number;
+    median: number | null;
+    mean: number | null;
+  }[];
+  distribution: {
+    label: string;
+    reference: number;
+    affected: number;
+    comparison: number;
+  }[];
+  comparison_groups: Cohort[];
+  scatter: {
+    x: number;
+    y: number;
+    row_id: number;
+    affected: boolean;
+    group: string;
+  }[];
+  scatter_total: number;
+  scatter_columns: string[];
+  analysis_config: AnalysisConfig;
+  source_filters: ExploreConfig;
+  fingerprint: string;
+  notes?: string;
+  saved_id?: string;
+  saved_name?: string;
+};

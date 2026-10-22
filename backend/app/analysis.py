@@ -40,6 +40,7 @@ class ExploreRequest(BaseModel):
     aggregation: str = "mean"
     page: int = Field(default=0, ge=0, le=20000)
     explain_page: bool = False
+    duplicate_keys: list[str] = Field(default_factory=list, max_length=8)
 
 
 def prepare(payload: dict, request: AnalysisRequest):
@@ -140,6 +141,8 @@ def explore(result: dict, request: ExploreRequest) -> dict:
         raise ValueError("Bitte einen numerischen Messwert auswählen.")
     if request.period not in {"day", "week", "month"} or request.aggregation not in {"sum", "mean", "median", "count"}:
         raise ValueError("Ungültige Zeitauflösung oder Aggregation.")
+    if len(set(request.duplicate_keys)) != len(request.duplicate_keys) or any(name not in roles for name in request.duplicate_keys):
+        raise ValueError("Duplikatschlüssel müssen eindeutige vorhandene Spalten sein.")
     mask = pd.Series(True, index=frame.index)
     if request.query:
         mask &= frame.astype("string").apply(lambda col: col.str.contains(request.query, case=False, regex=False, na=False)).any(axis=1)
@@ -161,7 +164,7 @@ def explore(result: dict, request: ExploreRequest) -> dict:
         mask &= frame.index.isin(request.row_ids)
     subset = frame.loc[mask]
     ids = subset.index.tolist()
-    numeric = result["numeric_columns"]
+    numeric = sorted(result["numeric_columns"])
     profiles = [build_profile(name, roles[name], subset[name]) for name in frame.columns]
     correlations = []
     if len(subset) >= 3:
@@ -214,7 +217,12 @@ def explore(result: dict, request: ExploreRequest) -> dict:
         cluster_profiles.append({"cluster": cluster, "count": len(members), "differences": differences[:3]})
     anomalies = sorted((result["rows"][i] for i in ids if result["rows"][i]["anomaly"]), key=lambda row: row["score"], reverse=True)
     missing = int(subset.isna().sum().sum())
-    insights = discover(result, subset, profiles, correlations, len(anomalies))
+    coverage = {}
+    insights = discover(result, subset, profiles, correlations, len(anomalies), request.duplicate_keys, coverage)
+    complete_keys = subset.dropna(subset=request.duplicate_keys) if request.duplicate_keys else subset.iloc[:0]
+    coverage["duplicate_check"] = {"keys": request.duplicate_keys, "complete": len(complete_keys), "duplicate_rows": int(complete_keys.duplicated(subset=request.duplicate_keys, keep=False).sum()) if request.duplicate_keys else 0, "skipped": len(subset) - len(complete_keys) if request.duplicate_keys else 0}
+    from .findings import bind_findings
+    insights = bind_findings(result, subset, insights, request.model_dump())
     explained_anomalies = [{**row, "explanation": explain_row(result, row["id"])} for row in anomalies[:30]]
     page_rows = [result["rows"][i] for i in ids[request.page*50:(request.page+1)*50]]
     if request.explain_page:
@@ -224,6 +232,6 @@ def explore(result: dict, request: ExploreRequest) -> dict:
         "missing": missing, "duplicates": int(subset.astype("string").duplicated().sum()),
         "profiles": profiles, "correlations": correlations, "trend": trend, "groups": groups[:30], "group_total": len(groups),
         "skipped_dates": skipped_dates, "clusters": cluster_profiles, "anomalies": explained_anomalies, "anomaly_count": len(anomalies),
-        "insights": insights, "rows": page_rows,
+        "insights": insights, "coverage": coverage, "rows": page_rows,
         "page": request.page,
     })

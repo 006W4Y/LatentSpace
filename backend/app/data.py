@@ -31,6 +31,7 @@ def storage_path() -> Path:
 @contextmanager
 def connection():
     db = sqlite3.connect(storage_path(), timeout=30)
+    db.execute("PRAGMA foreign_keys = ON")
     try:
         with db:
             db.execute("CREATE TABLE IF NOT EXISTS datasets (id TEXT PRIMARY KEY, payload TEXT NOT NULL)")

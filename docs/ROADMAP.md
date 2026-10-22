@@ -2,50 +2,38 @@
 
 ## Produktziel
 
-Eine große, zugängliche Toolbox für die Arbeit mit Daten. Menschen importieren eigene Dateien und untersuchen Trends, Gruppen, Auffälligkeiten, Zusammenhänge und einzelne Beobachtungen. Fachliche Fragen führen zu passenden Werkzeugen; Algorithmen bleiben nachvollziehbar einstellbar.
+Eine zugängliche Toolbox, mit der Menschen aus einer einzelnen Tabelle verständliche und belegte Erkenntnisse gewinnen. Fachliche Fragen führen zu passenden Werkzeugen. Die Datenlandschaft ergänzt Zeitreihen, Tabellen, Vergleiche und Befunduntersuchungen. LatentSpace verändert keine Originaldaten; Bewertung, Bereinigung und weitere Verarbeitung übernimmt ein Analyst anhand der Ausgaben.
 
-Die Datenlandschaft ergänzt Zeitreihen, Tabellen und Diagramme. Erkenntnisse werden in überprüfbare Befunde, konkrete Auswahlen und Exporte überführt. LatentSpace verändert keine Originaldaten. Fachliche Bewertung, Bereinigung und weitere Verarbeitung übernimmt ein Analyst anhand der Ausgaben.
+**Vereinbarter Umfang:** Eine Datei pro Analyse. Verknüpfungen mehrerer Dateien und wiederkehrende Importvergleiche benötigen eine erneute Produktentscheidung.
 
-**Aktuell vereinbarter Umfang:** Eine Datei pro Analyse. Keine Verknüpfung mehrerer Dateien und kein wiederkehrender Importvergleich in der nächsten Ausbaustufe. Die Vollversion soll zuerst aus einer einzelnen Tabelle möglichst viele verständliche, belegte Erkenntnisse gewinnen; weitere Dateifunktionen werden erst nach erneuter Produktentscheidung geplant.
+## Implementiert bis Version 0.3
 
-## Implementiert bis Version 0.2
+- CSV/XLSX-Import, Rollenkorrektur, PCA/UMAP, HDBSCAN und Isolation Forest im Merkmalsraum.
+- Drei unabhängig auswählbare Beispielkontexte: Handel, Gebäudetechnik und Lernen.
+- Verknüpfte Filter, semantische Verteilungen, konkrete Einzelwerthinweise mit Median, Quartilen und Prüfregeln.
+- Alle geeigneten Messwert-, Kategorie- und Datumsspalten werden geprüft. Eignung vor Priorisierung, nachvollziehbare Abdeckung und von der Spaltenreihenfolge unabhängige Sortierung.
+- Strukturierte Befunde mit festen Referenz-IDs, betroffenen Spalten, Auswahlbezug und Prüfregeln.
+- Befundwerkstatt mit gemeinsamen Verteilungsgrenzen, Streudiagrammen, Gruppenwerten, zugehörigen Zellen und blätterbaren Befund-/Vergleichszeilen.
+- Fehlwertmuster nach Gruppe, Kalendermonat und deren Kombination; explizite Duplikatschlüssel mit Ausschluss unvollständiger Schlüssel.
+- Gruppenabhängige Korrelationen, nahezu lineare Redundanz, seltene Kategorienkombinationen und Korrelations-Sensitivitätsprüfung.
+- Befunde, feste Referenzen und Notizen in SQLite; vollständiger Befundexport als JSON.
+- Analysestände mit Parametern, Rollen, Filtern und Ansicht in SQLite. Modelle werden beim Öffnen erneut berechnet.
+- Ausgelagerte Konfigurations-, Tabellen-, Befund- und Diagnosekomponenten sowie Hooks für Abfragen.
+- Regressionstests, Null-/Fehlwertkontrollen und reale Iris-CSV; Backendtests, Build und Chromium-Prüfungen in CI.
 
-- Vollständiger Ablauf von CSV/XLSX über Rollenkorrektur bis zu realen Analysen und Export.
-- Lokale Speicherung und drei einzeln auswählbare synthetische Beispielkontexte: Handel, Gebäudetechnik und Lernen. Ein gemeinsamer Analysepfad mit Kontexttests über CSV-Importe, unterschiedliche Seeds und umbenannte Spalten.
-- Verknüpfte Filter und Rechteckauswahl zwischen Ansichten.
-- PCA und UMAP, HDBSCAN und Isolation Forest auf separatem Merkmalsraum.
-- Gruppenprofile, Zeitaggregate, Pearson-Korrelation und Datenprofile.
-- Analyseparameter, lokaler Start, Docker-Grundlage und Tests.
-- Eigene Insight-Ansicht mit Zahlenbelegen, Methodik, Auswahlbezug und gezieltem Wechsel zur passenden Analyse.
-- Statistische Erklärungen für Auffälligkeiten: globale und lokale Vergleichswerte, Median, Quartile, Mindeststichprobe und Abstandsprüfung.
-- Direkte Kennzeichnung der abweichenden Einzelwerte in Auffälligkeitenliste, Datentabelle und Inspector mit Richtung, Vergleichsmedian und tatsächlich erfüllter Prüfregel. Modellmarkierungen ohne Einzelwertbeleg werden ausdrücklich als reine Modellmarkierungen dargestellt.
-- Semantische Verteilungen: Monatsnamen mit Jahr, Kategorien, diskrete Messwerte und unverzerrte Kennungsdarstellung.
-- Analystenberichte als Markdown und JSON mit Befunden, Erklärungen, Zeilenbezug und Datenfingerabdruck.
-- Professioneller Arbeitsbereich mit klarer visueller Hierarchie und lesbareren Beschriftungen.
+## Als Nächstes: Qualität messen und Untersuchungen vertiefen
 
-## Als Nächstes: Alltagstauglichkeit
-
-1. Datentyp- und Einheitenprüfung erweitern: Prozent, Währung, Zeitzonen und explizite Datumsformate; Import mehrerer Excel-Blätter mit Auswahl.
-2. Weitere Erkenntnisse ergänzen: fehlende Werte und Duplikate fachlich einordnen, betroffene Zeilen referenzieren und konkrete Prüfaufträge exportieren. Keine Bearbeitung der Originaldaten.
-3. Resultate und Notizen dauerhaft speichern; gespeicherte Ansichten benennen, verwalten und löschen.
-4. Zeitbereiche direkt im Diagramm auswählen; robuste Trendkennzahlen, saisonale Muster und Veränderungspunkte ergänzen.
-5. Verteilungen zwischen selbst definierten Gruppen vergleichen; Effektgrößen und Stichprobengrößen verständlich darstellen.
-6. Befunde weiter priorisieren und fachlich kontextualisieren, abhängig von Datenart, Vergleichsbasis und Stichprobe; keine unbelegten Schlussfolgerungen.
+1. Mit echten Nutzern und annotierten Dateien messen: Welche Befunde werden erkannt, übersehen oder zu stark hervorgehoben? Precision/Recall nach Befundtyp, Laufzeiten und Fehlerfälle dokumentieren.
+2. Suchregeln anhand breiter Nullsimulationen kalibrieren. Mehrfachvergleiche, kleine Gruppen und wiederholte Beobachtungen stärker berücksichtigen. Deskriptive Monatsunterschiede gezielt auf zufällige Hervorhebung untersuchen.
+3. Strukturbrüche und saisonale Muster mit geeigneter Zeitreferenz ergänzen; Unsicherheit und Datenabdeckung direkt sichtbar machen.
+4. Einheiten, explizite Datumsformate, Zeitzonen und numerische Kategoriecodes besser erkennen; Auswahl eines Excel-Tabellenblatts ermöglichen.
+5. Weitere Ansichten und Hooks aus App.tsx auslagern. Notebook-Verwaltung und versionierte Berechnungsergebnisse erweitern.
+6. Vergleiche fachlich definierbarer Gruppen mit Effektgrößen und stabilen Gegenbeispielen ausbauen; gemeinsame Gruppenzusammensetzungen berücksichtigen.
 
 ## Danach: größere Toolbox
 
-- Nur nach erneuter Produktentscheidung: mehrere Tabellen verbinden oder wiederkehrende Dateiimporte vergleichen.
-- Nichtlineare Zusammenhänge und weitere Projektionen wie t-SNE.
-- Prognosen mit zeitgerechtem Backtesting, Baselines und Unsicherheiten.
-- Modellrepräsentationen über stabile IDs und Nachbarschaften vergleichen.
-- Datenabdeckung gegenüber expliziten Referenzdaten untersuchen.
-- Projektionsqualität, Nachbarschaftserhalt und Stabilität über Seeds messen.
-- Größere Datensätze: serverseitige Aggregation, Sampling, binäre Übertragung und GPU-Rendering.
+Nichtlineare Beziehungen, Projektionsqualität und Stabilität über Seeds, Vergleich von Modellrepräsentationen über stabile IDs und Nachbarschaften. Größere Dateien benötigen serverseitige Aggregation, Sampling und Performancebenchmarks. Prognosen benötigen zeitgerechtes Backtesting, Baselines und Unsicherheiten.
 
-## Späterer Team- und Cloudbetrieb
+## Team- und Cloudbetrieb
 
-Erst nach Bedarfserprobung: Authentifizierung, getrennte Datenräume, Datenbankmigrationen, Prozess-Worker, persistente Jobzustände, Berechtigungen und Freigaben. Die aktuelle lokale App ist dafür keine fertige Hostinglösung.
-
-## Erfolg prüfen
-
-Mit echten Testnutzern beobachten: Können sie eine eigene Datei ohne Hilfe importieren, die Rollen korrekt festlegen, einen Befund und seine Vergleichsbasis verstehen und einem Analysten die relevanten Zeilen samt Erklärung übergeben?
+Erst nach Bedarfserprobung: Anmeldung, getrennte Datenräume, Berechtigungen, Prozess-Worker und persistente Jobwarteschlangen. Die aktuelle lokale App ist dafür keine fertige Hostinglösung.

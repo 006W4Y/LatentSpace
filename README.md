@@ -4,7 +4,7 @@
 
 Diese erste funktionsfähige Version richtet sich an Menschen, die ihre Daten verstehen möchten. Die Datenlandschaft ist eine von mehreren verknüpften Perspektiven.
 
-**Version 0.2 konzentriert sich auf Erkenntnisse:** Auffälligkeiten werden mit konkreten Vergleichswerten erklärt, automatische Befunde sind nach Themen durchsuchbar und lassen sich als Analysebericht an Fachleute weitergeben. Die Originaldaten werden nicht bearbeitet.
+**Version 0.3 führt die Befundwerkstatt ein:** Jeder Befund lässt sich mit einer festen Referenzauswahl untersuchen, samt Verteilung, Vergleichsgruppen und zugehörigen Zellen. Befunde mit Notizen sowie Analysestände werden dauerhaft lokal gespeichert. Die Originaldaten werden nicht bearbeitet.
 
 ## Schnellstart mit Docker
 
@@ -72,7 +72,7 @@ python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 | --- | --- |
 | Daten importieren | CSV mit automatischer Trennzeichenerkennung und UTF-8-/Windows-Kodierung; XLSX, erstes Tabellenblatt |
 | Daten vorbereiten | Dezimalformat auswählen, Rollen überprüfen, Modellmerkmale festlegen |
-| Insights entdecken | Bis zu 16 automatische Befunde mit Zahlenbelegen, Vergleichsbasis, Methoden und Verknüpfung zur Detailansicht |
+| Insights entdecken | Bis zu 40 automatische Befunde (höchstens acht je Themenfamilie) mit Zahlenbelegen, Vergleichsbasis, Methoden und Verknüpfung zur Detailansicht |
 | Überblick gewinnen | Verteilungen, Mittelwert, Median, fehlende Werte und Datenprofile |
 | Zeitverläufe erkunden | Tag/Woche/Monat; Summe, Durchschnitt oder Zeilenzahl |
 | Gruppen vergleichen | Kategorien vergleichen; automatisch gefundene HDBSCAN-Gruppen untersuchen |
@@ -83,6 +83,10 @@ python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
 | Auswahl weiterverwenden | Suche und Filter gelten ansichtsübergreifend; gefilterte CSV exportieren |
 | Arbeit nachvollziehen | Analysekonfiguration samt Parametern, Seed und Paketversionen als JSON exportieren; Filteransichten im Browser merken |
 | Erkenntnisse übergeben | Markdown-/JSON-Bericht mit Befunden, Zeilenbezug, Erklärungen, Parametern und SHA-256-Fingerabdruck der Originalwerte |
+| Befunde untersuchen | Feste Referenzauswahl, gemeinsame Histogrammgrenzen, Gruppenwerte, Streudiagramme und blätterbare Befund-/Vergleichszeilen |
+| Daten diagnostizieren | Fehlwertmuster nach Gruppe und Kalendermonat, wählbare Duplikatschlüssel, seltene Kategorienkombinationen, lineare Redundanz und Sensitivitätsprüfungen |
+| Gruppenmuster aufdecken | Gleichgerichtete Korrelationen innerhalb von Gruppen bei schwachem globalem Zusammenhang |
+| Untersuchung fortsetzen | Befunde mit Notizen und Referenz-IDs sowie Analyseparameter, Filter und Ansicht dauerhaft in SQLite speichern |
 
 ## Was eine Erklärung bedeutet
 
@@ -98,9 +102,29 @@ Ein Einzelhinweis erfordert eine überschrittene Quartilsgrenze (1,5 × Quartils
 
 Diese Vergleiche sind **keine exakte Zerlegung des Isolation-Forest-Scores und keine kausale Erklärung**. Im Bericht stehen Vergleichsgröße, Stichprobengröße und methodische Grenzen.
 
-Die Insight-Ansicht erkennt unter anderem Quartilsabweichungen, Unterschiede von Gruppenmedianen, Kategorie-Konzentrationen, Korrelationen, fehlende Werte und Änderungen von Monatsmitteln. Monatsvergleiche verwenden nur Monate, deren Kalendergrenzen vom beobachteten Zeitraum abgedeckt sind. Die Befunde sind explorativ; es werden keine statistische Signifikanz, vollständige Erfassung oder zukünftige Entwicklungen behauptet.
+Die Insight-Ansicht erkennt Quartilsabweichungen, Unterschiede von Gruppenmedianen, Kategorie-Konzentrationen, Korrelationen, fehlende Werte und Änderungen von Monatsmitteln. Geeignete Messwert-, Kategorien- und Datumsspalten werden vollständig berücksichtigt. Erst danach werden Befunde mit einem von der Spaltenreihenfolge unabhängigen Tie-Break priorisiert. Korrelationen werden vor der Priorisierung auf genügend vollständige Wertepaare geprüft. Monatsvergleiche verwenden nur Monate, deren Kalendergrenzen vom beobachteten Zeitraum abgedeckt sind. Die Befunde sind explorativ; es werden keine statistische Signifikanz, vollständige Erfassung oder zukünftige Entwicklungen behauptet.
 
 Zur Weitergabe **Bericht exportieren** wählen: Markdown bietet einen lesbaren Bericht; JSON enthält zusätzlich vollständige strukturierte Befunde, Zeilen-IDs und Vergleichswerte. CSV-Exporte ergänzen die 1-basierte Datenzeile, den Anomaliescore und Modellmarkierungen. Originalspalten werden bei Namenskonflikten nicht überschrieben.
+
+## Befundwerkstatt und Datendiagnose
+
+1. **Insights → Befund untersuchen** öffnet eine eigene Vergleichsansicht. Sie zeigt die damalige Referenz, Befundzeilen, übrige Zeilen und gemeinsame Verteilungsgrenzen. Bei zwei Messwerten ergänzt ein Streudiagramm die Untersuchung; Gruppen werden farblich unterschieden. Ab 1.500 Punkten wird die Anzeige deterministisch reduziert, mit sichtbarer Anzahl. Die Berechnungen verwenden weiterhin die vollständige Referenz.
+2. Die zugehörigen Zellen erhalten den **Beleg des Befunds**. Ein Quartilsbefund benötigt keine zusätzliche Isolation-Forest-Markierung. Grenzen, Median und betroffene Zeilen stammen aus derselben damaligen Auswahl. Die Modellmarkierung steht separat daneben. Fehlwerte und gewählte Duplikatschlüssel besitzen ebenfalls eigene Zellbelege.
+3. **Analyseabdeckung & Duplikatschlüssel** zeigt geprüfte Spalten und Kombinationen sowie Kandidaten vor Priorisierung. Wähle bis zu acht Spalten als fachlichen Schlüssel. Alle Mitglieder mehrfach vorkommender vollständiger Schlüssel werden ausgewiesen; unvollständige Schlüssel werden mit Anzahl ausgeschlossen. Null Treffer werden ebenfalls in der Schlüsselprüfung angezeigt.
+4. Im Befund kannst du **Name und Notizen speichern** und später unter **Gespeicherte Befunde** erneut öffnen. Die Referenz bleibt nach Filterwechsel und Serverneustart erhalten. Der JSON-Export enthält sämtliche Befundzeilen mit Originalwerten, Referenz-IDs, Grenzen, Parametern und Notizen. Tabellenansichten zeigen jeweils 50 Zeilen.
+5. **Ansicht merken** speichert künftig einen Analysestand mit Rollen, Modellparametern, Filtern, Schlüsselwahl und Tab in SQLite. Beim Öffnen wird das Modell erneut mit diesen Parametern berechnet. Bereits vorhandene Browseransichten bleiben weiterhin zugänglich.
+
+Neue Diagnosen verwenden explizite Eignungsregeln:
+
+| Diagnose | Mindestbasis und Regel |
+| --- | --- |
+| Strukturierte Fehlwerte | Gruppe oder Gruppe × Kalendermonat: mindestens zehn Zeilen und fünf Fehlwerte; mindestens 30 übrige Zeilen; mindestens 25 Prozentpunkte und dreifache Fehlwertrate gegenüber dem Rest |
+| Gruppenabhängige Korrelation | Kategorien mit zwei bis sechs Gruppen; global mindestens 40 vollständige Paare und \|r\| ≤ 0,3; mindestens zwei gleichgerichtete Gruppen mit je 20 Paaren und \|r\| ≥ 0,6 |
+| Nahezu lineare Doppelung | Mindestens 30 Paare; \|Pearson\| und \|Spearman\| ≥ 0,995; relative Reststreuung einer linearen Abbildung ≤ 1 % |
+| Empfindlicher Zusammenhang | Mindestens 33 Paare und \|r\| ≥ 0,5; nach gemeinsamem Auslassen der drei größten Einzel-Auslasswirkungen verändert sich r um mindestens 0,35 |
+| Seltene Kategorienkombination | Mindestens 200 vollständige Paare; eine bis zwei beobachtete Kombinationen bei rechnerischer Unabhängigkeitsreferenz ≥ 15 und Verhältnis ≤ 0,1 |
+
+Für Kategorievergleiche werden bis zu 30 Ausprägungen je Spalte zugelassen. Diagnosen sind deskriptive Suchregeln. Wiederholte Messungen, Gruppenzusammensetzungen und viele gleichzeitige Vergleiche können die Interpretation beeinflussen. Die Sensitivitätsprüfung beweist keine Datenfehler; eine Redundanz führt nicht zum Löschen von Merkmalen. Eine Unabhängigkeitsreferenz ist keine fachlich erwartete Häufigkeit. Methodik und Grenzen stehen bei jedem Befund.
 
 ## Import und Grenzen
 
@@ -118,7 +142,7 @@ Zur Weitergabe **Bericht exportieren** wählen: Markdown bietet einen lesbaren B
 
 Datensätze liegen in `data/latentspace.sqlite3` oder im Verzeichnis aus `LATENTSPACE_DATA_DIR`. Die App besitzt keine Cloudanbindung und lädt keine externen Schriftarten oder Analysemodelle. Nach Installation ihrer Abhängigkeiten funktioniert sie mit eigenen Dateien offline.
 
-Berechnungen laufen in einem Hintergrundthread mit einer Warteschlange. Es werden maximal vier laufende/wartende Jobs angenommen und bis zu acht Jobs im Arbeitsspeicher gehalten. Analyseergebnisse werden nach einem Serverneustart neu berechnet. Die Datensätze bleiben erhalten. Gespeicherte Ansichten enthalten Filter und Tab in `localStorage` dieses Browsers, keine dauerhaften Ergebnis-Snapshots.
+Berechnungen laufen in einem Hintergrundthread mit einer Warteschlange. Es werden maximal vier laufende/wartende Jobs angenommen und bis zu acht Jobs im Arbeitsspeicher gehalten. Berechnete Modelle werden nach einem Serverneustart neu berechnet. Datensätze, neue Analysestände und gespeicherte Befunde mit Referenzen und Notizen bleiben in SQLite erhalten. Befund-Snapshots enthalten die festen statistischen Belege, Referenz-IDs, damaligen Modellmarkierungen und Parameter; sie benötigen keinen laufenden Analysejob. Änderungen an den Originalwerten werden beim Öffnen über den SHA-256-Fingerabdruck erkannt. Beim Löschen eines Datensatzes werden auch seine gespeicherten Untersuchungen gelöscht. Nicht gespeicherte Befunde liegen begrenzt im Analysespeicher (bis zu 512); nach einer Verdrängung muss die Insight-Ansicht erneut geöffnet werden.
 
 **Lokaler Einzelbetrieb:** Es gibt noch keine Anmeldung, Benutzertrennung oder Freigabefunktion. Deshalb das Backend nicht offen ins Internet stellen und nur einen Uvicorn-Prozess verwenden; Jobzustände werden nicht zwischen Prozessen geteilt.
 
@@ -137,9 +161,9 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Die Browserprüfungen starten eine eigene Serverinstanz mit temporärer Datenablage. GitHub Actions führt die Backend-Tests und den Frontend-Build aus.
+Die Browserprüfungen starten eine eigene Serverinstanz mit temporärer Datenablage. GitHub Actions führt Backendtests, Frontend-Build und die Chromium-Browserprüfungen aus. Bei fehlgeschlagenen Browserprüfungen werden Traces als CI-Artefakte aufbewahrt.
 
-Die Kontexttests importieren alle drei Beispiele als gewöhnliche CSV-Dateien, jeweils mit dem festen Demoseed und einem weiteren Seed. Sie prüfen nachvollziehbare Befunde, unveränderte Originalwerte, Berichte und die fehlende Zeitachse der Lernstudie. Zusätzliche Prüfungen benennen alle Spalten um und vergleichen die Analyseergebnisse. Das schützt vor einer Bindung an Handelsbegriffe; synthetische Tests ersetzen keine Erprobung mit echten Nutzerdaten.
+Die Kontexttests importieren alle drei Beispiele als gewöhnliche CSV-Dateien, jeweils mit dem festen Demoseed und einem weiteren Seed. Sie prüfen nachvollziehbare Befunde, unveränderte Originalwerte, Berichte und die fehlende Zeitachse der Lernstudie. Zusätzliche Prüfungen benennen alle Spalten um und vergleichen die Analyseergebnisse. Das schützt vor einer Bindung an Handelsbegriffe; Zusätzlich gibt es unabhängige Zufalls- und Fehlwertkontrollen sowie eine reale Iris-CSV. Details, Quellen und Grenzen stehen in [docs/VALIDATION.md](docs/VALIDATION.md).
 
 ## Projektstruktur
 
@@ -147,13 +171,17 @@ Die Kontexttests importieren alle drei Beispiele als gewöhnliche CSV-Dateien, j
 backend/app/data.py        Import, Rollenvorschläge, SQLite
 backend/app/demos.py       Drei unabhängige synthetische Beispielkontexte
 backend/app/analysis.py    Vorverarbeitung, Modelle, gefilterte Statistiken
-backend/app/insights.py    Typgerechte Datenprofile und automatische Befunde
+backend/app/insights.py    Typgerechte Profile, Spaltenabdeckung und Priorisierung
+backend/app/diagnostics.py Strukturierte Fehlwerte, Schlüssel und Kontextdiagnosen
+backend/app/findings.py    Feste Referenzen, Zellbelege, Untersuchung und Export
+backend/app/research.py    Persistente Befunde, Notizen und Analysestände
 backend/app/explanations.py Statistische Vergleichswerte für einzelne Zeilen
 backend/app/reports.py     Analystenberichte als Markdown und JSON
 backend/app/main.py        FastAPI, Job-Warteschlange, Export, Webauslieferung
 backend/tests/            Fachliche und API-Tests
 frontend/src/App.tsx       Arbeitsbereich und Analyseansichten
-frontend/src/components/  Interaktive Datenlandschaft
+frontend/src/components/  Befundwerkstatt, Tabellen, Konfiguration und Datenlandschaft
+frontend/src/hooks/       Abfragen für Exploration und gespeicherte Untersuchungen
 docs/ROADMAP.md            Nächste Ausbaustufen
 ```
 
