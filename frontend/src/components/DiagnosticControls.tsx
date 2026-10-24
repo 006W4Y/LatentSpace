@@ -20,7 +20,7 @@ export default function DiagnosticControls({
           </strong>{" "}
           · {coverage.numeric_columns} Messwerte, {coverage.category_columns}{" "}
           Kategorien, {coverage.date_columns} Datumsmerkmale.{" "}
-          {coverage.candidates} Kandidaten vor Priorisierung.
+          {coverage.candidates} Kandidaten vor Anzeigeauswahl.
         </p>
         <p>{coverage.note}</p>
         <p>
@@ -41,8 +41,8 @@ export default function DiagnosticControls({
             Schlüssel für die Duplikatprüfung (bis zu acht Spalten)
           </legend>
           <p>
-            Wähle, welche Kombination eine Zeile fachlich eindeutig
-            identifizieren sollte. Unvollständige Schlüssel werden ausgelassen.
+            Wähle Spalten, deren gemeinsame Werte auf Wiederholungen geprüft
+            werden. Unvollständige Kombinationen werden ausgelassen.
           </p>
           <div className="key-options">
             {columns.map((column) => (

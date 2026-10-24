@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
+from backend.tests.client import LocalClient as TestClient
 
 from backend.app.analysis import AnalysisRequest, ExploreRequest, analyze, explore
 from backend.app.data import demo_dataset, load_dataset, save_dataset
@@ -43,7 +43,7 @@ def test_long_date_ranges_aggregate_by_named_year_not_index():
 
 @pytest.mark.parametrize("values,expected", [([0, 1, 2], ["Januar", "Februar", "März"]), ([1, 2, 12], ["Januar", "Februar", "Dezember"])])
 def test_explicit_month_codes_are_named_with_visible_convention(values, expected):
-    profile = build_profile("Monat", "number", pd.Series(values))
+    profile = build_profile("Monat", "number", pd.Series(values), {"month_base": "zero" if 0 in values else "one"})
     assert [item["label"] for item in profile["distribution"]] == expected
     assert "= Januar" in profile["distribution_note"]
     assert build_profile("Monat", "number", pd.Series([0, 12]))["distribution_kind"] != "month_codes"

@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
+from backend.tests.client import LocalClient as TestClient
 
 from backend.app.analysis import AnalysisRequest, ExploreRequest, analyze, explore
 from backend.app.data import connection, import_file, load_dataset, save_dataset

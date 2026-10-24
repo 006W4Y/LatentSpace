@@ -108,7 +108,7 @@ test("a model flag without sufficient single-value evidence does not highlight a
   await expect(flagged.locator(".evidence-cell")).toHaveCount(0);
   await flagged.getByRole("button", { name: "#3", exact: true }).click();
   await expect(page.locator(".combination-note")).toContainText(
-    "Kein einzelner Wert",
+    "Keine Einzelwertregel liefert hier einen Treffer",
   );
   await expect(page.locator(".inspected-evidence")).toHaveCount(0);
 });
@@ -312,6 +312,12 @@ test("CSV import wizard preserves roles and German decimals", async ({
   await expect(
     page.getByLabel("Rolle für Kunden_ID", { exact: true }),
   ).toHaveValue("identifier");
+  await expect(
+    page.getByRole("button", { name: "Analyse starten", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByLabel("Datumsformat für Datum", { exact: true })
+    .selectOption("dmy");
   await page
     .getByRole("button", { name: "Analyse starten", exact: true })
     .click();
@@ -368,7 +374,7 @@ test("semantic month charts, evidence feed, anomaly explanation and analyst repo
   );
   await page.getByRole("button", { name: "Insights", exact: true }).click();
   await expect(page.locator(".findings-banner")).toContainText(
-    "überprüfbare Erkenntnisse",
+    "berechnete Befunde",
   );
   await page
     .locator(".insight-family-filters")
@@ -391,7 +397,7 @@ test("semantic month charts, evidence feed, anomaly explanation and analyst repo
   );
   await page.getByRole("button", { name: "#13", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "Warum fällt diese Zeile auf?" }),
+    page.getByRole("heading", { name: "Welche Einzelwertregeln treffen zu?" }),
   ).toBeVisible();
   await expect(page.locator(".comparison-card").first()).toContainText(
     "Umsatz",
@@ -403,12 +409,16 @@ test("semantic month charts, evidence feed, anomaly explanation and analyst repo
   await page.getByRole("button", { name: "Detailansicht schließen" }).click();
   await page.locator(".report-menu summary").click();
   const downloaded = page.waitForEvent("download");
-  await page.getByRole("button", { name: /Vollständige Befunde/ }).click();
+  await page.getByRole("button", { name: /Angezeigte Befunde/ }).click();
   const file = await downloaded;
   expect(file.suggestedFilename()).toBe("latentspace-insights.json");
   const report = JSON.parse(await readFile((await file.path())!, "utf8"));
   expect(report.dataset.rows).toBe(720);
-  expect(report.insights.length).toBeGreaterThan(5);
+  expect(report.insights).toHaveLength(1);
+  expect(report.insights[0].kind).toBe("trend");
+  expect(report.finding_selection.candidates).toBeGreaterThan(5);
+  expect(report.finding_selection.matched).toBe(1);
+  expect(report.selection.filters.finding_kind).toBe("trend");
   expect(
     report.explained_anomalies[0].explanation.reasons.length,
   ).toBeGreaterThan(0);
@@ -426,6 +436,17 @@ test("zero-based month codes show month names instead of numeric indices", async
     mimeType: "text/csv",
     buffer: Buffer.from("Monat,Wert\n0,10\n1,20\n2,30\n1,25\n"),
   });
+  const settings = page
+    .getByRole("dialog")
+    .locator("tr")
+    .filter({ has: page.getByLabel("Rolle für Monat", { exact: true }) });
+  await settings.getByText("Darstellung wählen", { exact: true }).click();
+  await expect(
+    page.getByLabel("Monatsdarstellung für Monat", { exact: true }),
+  ).toHaveValue("none");
+  await page
+    .getByLabel("Monatsdarstellung für Monat", { exact: true })
+    .selectOption("zero");
   await page
     .getByRole("button", { name: "Analyse starten", exact: true })
     .click();

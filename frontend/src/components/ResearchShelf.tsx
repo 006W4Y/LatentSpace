@@ -42,7 +42,13 @@ export default function ResearchShelf({
                 <FolderOpen size={16} />
                 {record.name}
               </button>
-              {record.notes && <p>{record.notes}</p>}
+              {record.notes && (
+                <p>
+                  <small>Notiz · Nutzereingabe</small>
+                  <br />
+                  {record.notes}
+                </p>
+              )}
               <small>
                 {new Date(record.created_at).toLocaleString("de-DE")}
               </small>

@@ -55,6 +55,12 @@ test("finding reference, cells, notes and analysis configuration survive changed
     .click();
   await expect(dialog.locator(".finding-cell-iqr")).toHaveCount(3);
   await dialog
+    .getByLabel("Zeile 81 im Vergleich auslassen", { exact: true })
+    .check();
+  await expect(dialog.getByLabel("Sensitivitätsvergleich")).toContainText(
+    "82 von 83 Referenzzeilen",
+  );
+  await dialog
     .getByLabel("Befundname", { exact: true })
     .fill("Werte in Gruppe A prüfen");
   await dialog
@@ -73,6 +79,10 @@ test("finding reference, cells, notes and analysis configuration survive changed
   expect(report.reference_row_ids).toHaveLength(83);
   expect(report.rows).toHaveLength(3);
   expect(report.notes).toBe("Mit Fachbereich abgleichen.");
+  expect(report.notes_origin).toBe("user");
+  expect(report.review.excluded_rows).toEqual([80]);
+  expect(report.finding.basis.filters).toEqual(["Gruppe = A"]);
+  expect(report.finding.basis.reference_rows).toBe(83);
   await dialog
     .getByRole("button", { name: "Befunduntersuchung schließen" })
     .click();
@@ -95,6 +105,9 @@ test("finding reference, cells, notes and analysis configuration survive changed
     "83 Zeilen beim Finden",
   );
   await expect(dialog.locator(".finding-cell-iqr")).toHaveCount(3);
+  await expect(
+    dialog.getByLabel("Zeile 81 im Vergleich auslassen", { exact: true }),
+  ).toBeChecked();
   await expect(dialog.getByLabel("Notizen zum Befund")).toHaveValue(
     "Mit Fachbereich abgleichen.",
   );

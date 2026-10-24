@@ -5,6 +5,7 @@ import logging
 import threading
 import time
 import uuid
+import secrets
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Literal
@@ -22,8 +23,11 @@ from .explanations import explain_row
 from .reports import build_report, markdown_report
 from .findings import require_finding, investigate, finding_report
 from . import research
+from .security import LocalBoundary, spreadsheet_csv
 
-app = FastAPI(title="LatentSpace", version="0.3.0")
+app = FastAPI(title="LatentSpace", version="0.4.0")
+local_token = secrets.token_urlsafe(32)
+app.add_middleware(LocalBoundary, token=local_token)
 executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="latentspace")
 jobs: dict[str, dict] = {}
 lock = threading.Lock()
@@ -32,7 +36,12 @@ logger = logging.getLogger(__name__)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "version": "0.3.0"}
+    return {"status": "ok", "version": "0.4.0"}
+
+
+@app.get("/api/session")
+def local_session():
+    return {"token": local_token, "version": "0.4.0"}
 
 
 @app.get("/api/datasets")
@@ -164,13 +173,12 @@ def export(job_id: str, request: ExploreRequest):
         columns.append(name)
         return name
     cluster_name = annotation_name("LatentSpace_Cluster")
-    anomaly_name = annotation_name("LatentSpace_Auffaellig")
+    anomaly_name = annotation_name("LatentSpace_Modellmarkierung")
     row_name = annotation_name("LatentSpace_Zeile")
     score_name = annotation_name("LatentSpace_Anomaliescore")
     rows = [{**result["rows"][i]["values"], cluster_name: result["rows"][i]["cluster"], anomaly_name: result["rows"][i]["anomaly"], row_name: i + 1, score_name: result["rows"][i]["score"]} for i in selected]
-    frame = pd.DataFrame(rows, columns=columns).map(lambda value: "'" + value if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")) else value)
-    data = frame.to_csv(index=False).encode("utf-8-sig")
-    return StreamingResponse(io.BytesIO(data), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="latentspace-auswahl.csv"'})
+    data, _ = spreadsheet_csv(pd.DataFrame(rows, columns=columns))
+    return StreamingResponse(io.BytesIO(data), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="latentspace-auswahl.csv"', "X-LatentSpace-CSV-Protection": "quoted-tab-prefix"})
 
 
 @app.get("/api/analyses/{job_id}/rows/{row_id}/explanation")
@@ -194,18 +202,28 @@ def report(job_id: str, request: ExploreRequest, format: str = "markdown"):
     return StreamingResponse(io.BytesIO(markdown_report(data).encode("utf-8")), media_type="text/markdown", headers={"Content-Disposition": 'attachment; filename="latentspace-insights.md"'})
 
 
+class ReviewOptions(BaseModel):
+    column: str | None = None
+    exclude_rows: list[int] = Field(default_factory=list, max_length=50)
+
+
 class InvestigationRequest(BaseModel):
     mode: Literal["affected", "comparison", "reference"] = "affected"
     page: int = Field(default=0, ge=0, le=400)
     column: str | None = None
 
 
+    exclude_rows: list[int] | None = Field(default=None, max_length=50)
+
+
 class SaveFindingRequest(BaseModel):
+    review: ReviewOptions = Field(default_factory=ReviewOptions)
     name: str | None = Field(default=None, min_length=1, max_length=300)
     notes: str = Field(default="", max_length=10000)
 
 
 class EditResearchRequest(BaseModel):
+    review: ReviewOptions | None = None
     name: str | None = Field(default=None, min_length=1, max_length=300)
     notes: str | None = Field(default=None, max_length=10000)
 
@@ -234,7 +252,8 @@ def save_finding(job_id: str, token: str, request: SaveFindingRequest):
     try:
         result = require_job(job_id, done=True)["result"]
         snapshot = require_finding(result, token)
-        return research.save(result["dataset_id"], "finding", {"name": request.name or snapshot["finding"]["title"], "notes": request.notes, "snapshot": snapshot})
+        investigate(result, snapshot, **request.review.model_dump())
+        return research.save(result["dataset_id"], "finding", {"name": request.name or snapshot["finding"]["title"], "notes": request.notes, "notes_origin": "user", "review": request.review.model_dump(), "snapshot": snapshot})
     except (KeyError, ValueError) as exc:
         raise research_error(exc) from exc
 
@@ -259,8 +278,14 @@ def list_research(dataset_id: str):
 @app.patch("/api/research/{record_id}")
 def edit_research(record_id: str, request: EditResearchRequest):
     try:
+        if request.review is not None:
+            record = research.get(record_id)
+            if record["kind"] != "finding":
+                raise ValueError("Auslassvergleiche sind nur für Befunde verfügbar.")
+            result, snapshot = research.restore_finding(record)
+            investigate(result, snapshot, **request.review.model_dump())
         return research.update(record_id, **request.model_dump())
-    except KeyError as exc:
+    except (KeyError, ValueError) as exc:
         raise research_error(exc) from exc
 
 
@@ -279,7 +304,12 @@ def saved_investigation(record_id: str, request: InvestigationRequest):
         if record["kind"] != "finding":
             raise ValueError("Dieser Eintrag ist eine Analyseansicht, kein Befund.")
         result, snapshot = research.restore_finding(record)
-        return {**investigate(result, snapshot, **request.model_dump()), "saved_id": record_id, "notes": record.get("notes", ""), "saved_name": record["name"]}
+        options = request.model_dump()
+        if options["exclude_rows"] is None:
+            options["exclude_rows"] = record.get("review", {}).get("exclude_rows", [])
+        if options["column"] is None:
+            options["column"] = record.get("review", {}).get("column")
+        return {**investigate(result, snapshot, **options), "saved_id": record_id, "notes": record.get("notes", ""), "saved_name": record["name"]}
     except (KeyError, ValueError) as exc:
         raise research_error(exc) from exc
 
@@ -289,7 +319,7 @@ def export_finding(job_id: str, token: str, request: EditResearchRequest | None 
     request = request or EditResearchRequest()
     try:
         result = require_job(job_id, done=True)["result"]
-        return JSONResponse({**finding_report(result, require_finding(result, token), request.notes or ""), "name": request.name})
+        return JSONResponse({**finding_report(result, require_finding(result, token), request.notes or "", request.review.model_dump() if request.review else None), "name": request.name})
     except (KeyError, ValueError) as exc:
         raise research_error(exc) from exc
 
@@ -302,7 +332,7 @@ def export_saved_finding(record_id: str, request: EditResearchRequest | None = N
         if record["kind"] != "finding":
             raise ValueError("Dieser Eintrag ist kein Befund.")
         result, snapshot = research.restore_finding(record)
-        return JSONResponse({**finding_report(result, snapshot, request.notes if request.notes is not None else record.get("notes", "")), "name": request.name or record["name"]})
+        return JSONResponse({**finding_report(result, snapshot, request.notes if request.notes is not None else record.get("notes", ""), request.review.model_dump() if request.review else record.get("review")), "name": request.name or record["name"]})
     except (KeyError, ValueError) as exc:
         raise research_error(exc) from exc
 

@@ -1,0 +1,121 @@
+{
+  "app_version": "0.4.0",
+  "versions": {
+    "numpy": "2.3.5",
+    "pandas": "2.2.3"
+  },
+  "datasets": 150,
+  "rows_per_dataset": 240,
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29
+  ],
+  "seed_mapping": "NumPy SeedSequence([20261024, distribution_index, seed]); distinct random stream for every distribution and replicate",
+  "design": "Three independent numerical columns; independent category, calendar day and 10% MCAR in M0. Identical search rules, no Isolation Forest/HDBSCAN or projection.",
+  "interpretation": "Descriptive search matches on random controls. Counts are not a calibrated false-positive rate, significance test or domain-error probability. Quartile and monthly differences can occur in random data.",
+  "results": {
+    "normal": {
+      "datasets": 30,
+      "rule_matches": {
+        "missing": 30,
+        "missing_pattern": 1,
+        "range": 76,
+        "time": 83
+      },
+      "datasets_with_match": {
+        "missing": 30,
+        "missing_pattern": 1,
+        "range": 30,
+        "time": 30
+      }
+    },
+    "uniform": {
+      "datasets": 30,
+      "rule_matches": {
+        "missing": 30,
+        "missing_pattern": 2,
+        "time": 79
+      },
+      "datasets_with_match": {
+        "missing": 30,
+        "missing_pattern": 2,
+        "time": 29
+      }
+    },
+    "lognormal": {
+      "datasets": 30,
+      "rule_matches": {
+        "missing": 30,
+        "missing_pattern": 1,
+        "range": 90,
+        "time": 89
+      },
+      "datasets_with_match": {
+        "missing": 30,
+        "missing_pattern": 1,
+        "range": 30,
+        "time": 30
+      }
+    },
+    "student_t3": {
+      "datasets": 30,
+      "rule_matches": {
+        "missing": 30,
+        "missing_pattern": 1,
+        "range": 90,
+        "time": 89
+      },
+      "datasets_with_match": {
+        "missing": 30,
+        "missing_pattern": 1,
+        "range": 30,
+        "time": 30
+      }
+    },
+    "poisson": {
+      "datasets": 30,
+      "rule_matches": {
+        "difference": 16,
+        "missing": 30,
+        "missing_pattern": 2,
+        "range": 83,
+        "time": 87
+      },
+      "datasets_with_match": {
+        "difference": 10,
+        "missing": 30,
+        "missing_pattern": 2,
+        "range": 30,
+        "time": 30
+      }
+    }
+  }
+}

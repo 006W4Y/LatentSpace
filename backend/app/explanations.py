@@ -58,7 +58,7 @@ def comparison(feature: str, value: float, values, kind: str, other_features: li
         criterion = f"Abstand zum Vergleichsmedian: {format_number(magnitude)} Vergleichsstreuungen; die Schwelle beträgt 3."
     rank = float(100 * ((observed < value).sum() + .5 * (observed == value).sum()) / len(observed))
     direction = "höher" if delta > 0 else "niedriger" if delta < 0 else "gleich"
-    scope = "vergleichbarer Zeilen" if kind == "context" else "der übrigen Zeilen"
+    scope = "der Nachbarreferenz" if kind == "context" else "der übrigen Zeilen"
     return clean_json({
         "feature": feature, "value": value, "kind": kind, "direction": direction,
         "median": stats["median"], "q1": stats["q1"], "q3": stats["q3"],
@@ -125,10 +125,10 @@ def explain_row(result: dict, row_id: int) -> dict:
     evidence = [item for item in reasons if item["is_evidence"]]
     if evidence:
         leading = evidence[0]
-        context = "vergleichbaren Zeilen" if leading["kind"] == "context" else "den übrigen Zeilen"
+        context = "der Nachbarreferenz" if leading["kind"] == "context" else "den übrigen Zeilen"
         summary = f"{leading['feature']} ist mit {format_number(leading['value'])} {leading['direction']} als der Median von {format_number(leading['median'])} bei {context}."
     elif available and row["anomaly"]:
-        summary = "Das Modell markiert diese Zeile. Die Einzelvergleiche liefern keinen belastbaren Hinweis auf ein bestimmtes Merkmal."
+        summary = "Das Modell markiert diese Zeile. Keine der Einzelwertregeln liefert hier einen Treffer."
     elif available:
         summary = "Das Modell markiert diese Zeile nicht. Die Vergleiche zeigen, wie ihre Messwerte im Datensatz liegen."
     else:

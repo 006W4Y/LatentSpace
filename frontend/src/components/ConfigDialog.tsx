@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { X, CircleHelp, LoaderCircle, Sparkles } from "lucide-react";
-import type { AnalysisConfig, Column, Dataset, Role } from "../api";
+import type {
+  AnalysisConfig,
+  Column,
+  ColumnDisplay,
+  Dataset,
+  Role,
+} from "../api";
 import { number, roleLabels } from "../api";
 import Field from "./Field";
 const formatValue = (value: unknown) =>
@@ -37,6 +43,29 @@ export default function ConfigDialog({
     initial?.projection ?? "pca",
   );
   const [minSize, setMinSize] = useState(initial?.min_cluster_size ?? 20);
+  const [display, setDisplay] = useState<Record<string, ColumnDisplay>>(() =>
+    Object.fromEntries(
+      dataset.columns.map((column) => [
+        column.name,
+        {
+          date_format: column.date_format_suggestion ?? null,
+          month_base: "none",
+          unit_label: "",
+          ...initial?.display?.[column.name],
+        },
+      ]),
+    ),
+  );
+  const needDateChoice = dataset.columns.some(
+    (column) =>
+      roles[column.name] === "date" && !display[column.name]?.date_format,
+  );
+  function configure(name: string, patch: Partial<ColumnDisplay>) {
+    setDisplay((previous) => ({
+      ...previous,
+      [name]: { ...previous[name], ...patch },
+    }));
+  }
   const close = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     close.current?.focus();
@@ -48,6 +77,8 @@ export default function ConfigDialog({
   }, [onClose, busy]);
   function changeRole(column: Column, role: Role) {
     setRoles((previous) => ({ ...previous, [column.name]: role }));
+    if (!["number", "category"].includes(role))
+      configure(column.name, { month_base: "none" });
     setFeatures((previous) =>
       role === "number"
         ? Array.from(new Set([...previous, column.name])).slice(0, 40)
@@ -101,9 +132,10 @@ export default function ConfigDialog({
           <div className="info-box">
             <CircleHelp size={18} />
             <p>
-              Eine Kennung wie eine Kundennummer ist kein Messwert. Prüfe die
-              vorgeschlagenen Rollen. Angehakte Messwerte fließen in Cluster,
-              Anomalien und die Landschaft ein.
+              Rollen und Formate sind korrigierbare Vorschläge. Wähle
+              Datumsfolgen und optionale Monatsdarstellungen ausdrücklich.
+              Einheitenlabels sind Nutzereingaben; sie verändern keine Werte.
+              Angehakte Messwerte werden für die Modellberechnung verwendet.
             </p>
           </div>
           {dataset.notices.map((notice) => (
@@ -118,6 +150,7 @@ export default function ConfigDialog({
                   <th>Spalte</th>
                   <th>Beispielwerte</th>
                   <th>Rolle</th>
+                  <th>Darstellung und Format</th>
                   <th>Modellanalyse</th>
                 </tr>
               </thead>
@@ -147,6 +180,86 @@ export default function ConfigDialog({
                           </option>
                         ))}
                       </select>
+                    </td>
+                    <td className="column-display-settings">
+                      {roles[column.name] === "date" && (
+                        <label className="field">
+                          <span>Datumsfolge</span>
+                          <select
+                            aria-label={`Datumsformat für ${column.name}`}
+                            value={display[column.name].date_format ?? ""}
+                            onChange={(event) =>
+                              configure(column.name, {
+                                date_format: event.target
+                                  .value as ColumnDisplay["date_format"],
+                              })
+                            }
+                          >
+                            <option value="" disabled>
+                              Format auswählen
+                            </option>
+                            <option value="iso">Jahr-Monat-Tag (ISO)</option>
+                            <option value="dmy">Tag/Monat/Jahr</option>
+                            <option value="mdy">Monat/Tag/Jahr</option>
+                          </select>
+                          {column.date_ambiguous &&
+                            !display[column.name].date_format && (
+                              <small className="error-inline">
+                                Mehrdeutige Reihenfolge
+                              </small>
+                            )}
+                          <small>
+                            ISO-Werte bleiben ISO. Zeitwerte werden in UTC
+                            verglichen.
+                          </small>
+                        </label>
+                      )}
+                      <details>
+                        <summary>Darstellung wählen</summary>
+                        {["number", "category"].includes(roles[column.name]) &&
+                          (column.month_choices?.length ?? 0) > 0 && (
+                            <label className="field">
+                              <span>Code-Darstellung</span>
+                              <select
+                                aria-label={`Monatsdarstellung für ${column.name}`}
+                                value={display[column.name].month_base}
+                                onChange={(event) =>
+                                  configure(column.name, {
+                                    month_base: event.target
+                                      .value as ColumnDisplay["month_base"],
+                                  })
+                                }
+                              >
+                                <option value="none">
+                                  Originale Codes / Zahlen
+                                </option>
+                                {column.month_choices?.includes("zero") && (
+                                  <option value="zero">
+                                    Monatsnamen · 0 = Januar
+                                  </option>
+                                )}
+                                {column.month_choices?.includes("one") && (
+                                  <option value="one">
+                                    Monatsnamen · 1 = Januar
+                                  </option>
+                                )}
+                              </select>
+                            </label>
+                          )}
+                        <label className="field">
+                          <span>Anzeige- / Einheitenlabel (Nutzereingabe)</span>
+                          <input
+                            maxLength={40}
+                            aria-label={`Einheitenlabel für ${column.name}`}
+                            value={display[column.name].unit_label}
+                            onChange={(event) =>
+                              configure(column.name, {
+                                unit_label: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                      </details>
                     </td>
                     <td>
                       <input
@@ -197,7 +310,8 @@ export default function ConfigDialog({
           <p className="small-note">
             Fehlende Messwerte werden ausschließlich für die Modellanalyse mit
             dem Median ergänzt. UMAP kann beim ersten Start länger dauern.
-            Maximal 40 Modellmerkmale.
+            Maximal 40 Modellmerkmale. Ohne Zeitzonenangabe werden Zeitwerte als
+            UTC gelesen.
           </p>
           {!features.length &&
             dataset.columns.some((c) => roles[c.name] === "number") && (
@@ -218,13 +332,20 @@ export default function ConfigDialog({
             className="button primary"
             disabled={
               busy ||
+              needDateChoice ||
               !Number.isFinite(minSize) ||
               minSize < 3 ||
               minSize > 1000 ||
               (!features.length && Object.values(roles).includes("number"))
             }
             onClick={() =>
-              onRun({ roles, features, projection, min_cluster_size: minSize })
+              onRun({
+                roles,
+                features,
+                projection,
+                min_cluster_size: minSize,
+                display,
+              })
             }
           >
             {busy ? (

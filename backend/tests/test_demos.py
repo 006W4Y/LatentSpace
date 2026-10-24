@@ -5,7 +5,7 @@ import json
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
+from backend.tests.client import LocalClient as TestClient
 
 from backend.app.analysis import AnalysisRequest, ExploreRequest, analyze, explore
 from backend.app.data import demo_dataset, import_file, list_datasets, load_dataset, save_dataset
@@ -65,7 +65,7 @@ def test_analysis_does_not_depend_on_domain_names(kind):
     second = analyze(load_dataset(renamed["id"]), AnalysisRequest(roles=roles))
     np.testing.assert_allclose([row["score"] for row in first["rows"]], [row["score"] for row in second["rows"]])
     assert [row["cluster"] for row in first["rows"]] == [row["cluster"] for row in second["rows"]]
-    assert [item["kind"] for item in explore(first, ExploreRequest())["insights"]] == [item["kind"] for item in explore(second, ExploreRequest())["insights"]]
+    assert explore(first, ExploreRequest())["coverage"]["kind_counts"] == explore(second, ExploreRequest())["coverage"]["kind_counts"]
 
 
 def test_energy_preserves_negative_measurements_calendar_order_and_sensor_gap():

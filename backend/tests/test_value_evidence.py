@@ -3,7 +3,7 @@ import copy
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
+from backend.tests.client import LocalClient as TestClient
 
 from backend.app.analysis import AnalysisRequest, ExploreRequest, analyze, explore
 from backend.app.data import load_dataset, save_dataset
@@ -80,7 +80,7 @@ def test_model_only_flags_do_not_invent_a_specific_cell():
     detail = explain_row(result, 2)
     assert detail["assessment"] == "model_only"
     assert detail["reasons"] == []
-    assert "keinen belastbaren Hinweis" in detail["summary"]
+    assert "Keine der Einzelwertregeln liefert hier einen Treffer" in detail["summary"]
 
 
 def test_page_evidence_is_available_via_the_normal_exploration_endpoint():

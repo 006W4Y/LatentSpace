@@ -93,17 +93,17 @@ export default function ExplanationPanel({
     );
   return (
     <section className="explanation-panel">
-      <span className="eyebrow">STATISTISCHE EINORDNUNG</span>
+      <span className="eyebrow">EINZELWERTREGELN · GETRENNT VOM MODELL</span>
       <h3>
         {row.anomaly
-          ? "Warum fällt diese Zeile auf?"
+          ? "Welche Einzelwertregeln treffen zu?"
           : "Wie liegen die Messwerte?"}
       </h3>
       <p className="explanation-summary">{explanation.summary}</p>
       {explanation.assessment === "model_only" && (
         <p className="combination-note">
-          Kein einzelner Wert ist durch die Vergleichsregeln als auffällig
-          belegt. Die Markierung betrifft die Zeile im Modell.
+          Keine Einzelwertregel liefert hier einen Treffer. Die Markierung
+          betrifft die Zeile im Modell.
         </p>
       )}
       {explanation.score_percentile !== null && (

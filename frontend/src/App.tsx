@@ -43,7 +43,15 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, clusterColor, download, number, post, roleLabels } from "./api";
+import {
+  api,
+  clusterColor,
+  download,
+  localFetch,
+  number,
+  post,
+  roleLabels,
+} from "./api";
 import type {
   Analysis,
   AnalysisConfig,
@@ -53,7 +61,7 @@ import type {
   ExploreConfig,
 } from "./api";
 import Landscape from "./components/Landscape";
-import InsightFeed, { variedInsights } from "./components/InsightFeed";
+import InsightFeed from "./components/InsightFeed";
 import ProfileCard from "./components/ProfileCard";
 import ExplanationPanel from "./components/ExplanationPanel";
 import ReportActions from "./components/ReportActions";
@@ -67,6 +75,7 @@ import Illustration from "./components/Illustration";
 import Field from "./components/Field";
 import DataTableView from "./components/DataTableView";
 import DiagnosticControls from "./components/DiagnosticControls";
+import FindingControls from "./components/FindingControls";
 import ResearchShelf from "./components/ResearchShelf";
 import useExploration from "./hooks/useExploration";
 import useResearch from "./hooks/useResearch";
@@ -137,6 +146,12 @@ const navigation: {
   },
 ];
 const emptyExplore: ExploreConfig = {
+  finding_sort: "name",
+  finding_direction: "asc",
+  finding_kind: "all",
+  finding_origin: "all",
+  finding_offset: 0,
+  finding_limit: 40,
   duplicate_keys: [],
   query: "",
   category_column: null,
@@ -221,6 +236,12 @@ export default function App() {
   const [message, setMessage] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [pending, setPending] = useState<Dataset | null>(null);
+  const [pendingInitial, setPendingInitial] = useState<
+    AnalysisConfig | undefined
+  >();
+  const pendingRestore = useRef<
+    { config: ExploreConfig; view: View } | undefined
+  >(undefined);
   const [decimal, setDecimal] = useState(".");
   const [inspected, setInspected] = useState<DataRow | null>(null);
   const [chartFeature, setChartFeature] = useState("");
@@ -287,13 +308,34 @@ export default function App() {
   }
 
   function update(patch: Partial<ExploreConfig>) {
-    setConfig((previous) => ({ ...previous, ...patch, page: patch.page ?? 0 }));
+    setConfig((previous) => ({
+      ...previous,
+      ...patch,
+      page: patch.page ?? 0,
+      finding_offset: patch.finding_offset ?? 0,
+    }));
   }
   async function run(
     selected: Dataset,
     options?: AnalysisConfig,
     restore?: { config: ExploreConfig; view: View },
   ) {
+    if (
+      selected.columns.some(
+        (column) =>
+          (options?.roles[column.name] ?? column.role) === "date" &&
+          (column.date_ambiguous || !column.date_format_suggestion) &&
+          !options?.display?.[column.name]?.date_format,
+      )
+    ) {
+      setBusy(false);
+      setPendingInitial(options);
+      pendingRestore.current = restore;
+      setPending(selected);
+      return;
+    }
+    setPendingInitial(undefined);
+    pendingRestore.current = undefined;
     const current = ++generation.current;
     setBusy(true);
     setError("");
@@ -313,6 +355,16 @@ export default function App() {
         .slice(0, 40),
       projection: "pca",
       min_cluster_size: 20,
+      display: Object.fromEntries(
+        selected.columns.map((column) => [
+          column.name,
+          {
+            date_format: column.date_format_suggestion ?? null,
+            month_base: "none" as const,
+            unit_label: "",
+          },
+        ]),
+      ),
     };
     try {
       const started = await post<{ id: string }>(
@@ -336,12 +388,14 @@ export default function App() {
             (name) => result.roles[name] === "category",
           );
           setConfig(
-            restore?.config ?? {
-              ...emptyExplore,
-              date_column: dates[0] ?? null,
-              value_column: result.numeric_columns[0] ?? null,
-              group_column: groups[0] ?? null,
-            },
+            restore
+              ? { ...emptyExplore, ...restore.config }
+              : {
+                  ...emptyExplore,
+                  date_column: dates[0] ?? null,
+                  value_column: result.numeric_columns[0] ?? null,
+                  group_column: groups[0] ?? null,
+                },
           );
           setChartFeature(result.numeric_columns[0] ?? "");
           setAnalysis(result);
@@ -407,7 +461,7 @@ export default function App() {
     if (!job) return;
     setExporting(true);
     try {
-      const response = await fetch(`/api/analyses/${job}/export`, {
+      const response = await localFetch(`/api/analyses/${job}/export`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(config),
@@ -502,7 +556,11 @@ export default function App() {
   );
   const selectedCount = exploration?.count ?? 0;
   const settingsSameDataset = pending?.id === analysis?.dataset_id;
-  const closeConfig = useCallback(() => setPending(null), []);
+  const closeConfig = useCallback(() => {
+    setPending(null);
+    setPendingInitial(undefined);
+    pendingRestore.current = undefined;
+  }, []);
 
   const valueSelect = (
     <Field label="Messwert">
@@ -663,7 +721,7 @@ export default function App() {
             <ArrowUpRight size={14} />
           </button>
           <span className="version">
-            LATENTSPACE <span>v0.3 · BEFUNDWERKSTATT</span>
+            LATENTSPACE <span>v0.4 · DATENWERKSTATT</span>
           </span>
         </div>
       </aside>
@@ -764,8 +822,8 @@ export default function App() {
                 </span>
                 <h1>In deinen Daten steckt mehr.</h1>
                 <p>
-                  Entdecke Muster, stelle Fragen und finde heraus, was wirklich
-                  auffällt.
+                  Entdecke Muster, stelle Fragen und finde heraus, welche Werte
+                  und Beziehungen berechnet wurden.
                 </p>
               </div>
               <Badge>Explorative Datenanalyse</Badge>
@@ -977,7 +1035,7 @@ export default function App() {
                   onChange={(e) => update({ anomalies_only: e.target.checked })}
                 />
                 <Activity size={14} />
-                Nur auffällige
+                Nur Modellmarkierungen
               </label>
               <span className="filter-count">
                 {exploring && <LoaderCircle size={12} className="spin" />}
@@ -1069,7 +1127,7 @@ export default function App() {
                         icon={Layers3}
                       />
                       <Metric
-                        label="Auffällige Zeilen"
+                        label="Modellmarkierte Zeilen"
                         value={number(exploration.anomaly_count, 0)}
                         detail="Zur genaueren Prüfung"
                         icon={Activity}
@@ -1082,20 +1140,21 @@ export default function App() {
                         </span>
                         <h2>Was deine Daten zeigen</h2>
                         <p>
-                          Konkrete Befunde für deine aktuelle Auswahl. Jeder
-                          Hinweis ist überprüfbar.
+                          Auszug: bis zu sechs Befunde der aktuellen Liste, in
+                          deren Sortierreihenfolge. Alle gefundenen Befunde und
+                          Filter stehen unter Insights.
                         </p>
                       </div>
                       <button
                         className="button secondary small"
                         onClick={() => setView("insights")}
                       >
-                        Alle {exploration.insights.length} Insights
+                        Alle {exploration.coverage.candidates} Befunde
                         <ArrowRight size={15} />
                       </button>
                     </div>
                     <InsightFeed
-                      items={variedInsights(exploration.insights)}
+                      items={exploration.insights.slice(0, 6)}
                       onExplore={exploreInsight}
                       compact
                     />
@@ -1125,7 +1184,7 @@ export default function App() {
                             </span>
                             <span>
                               <i className="ring" />
-                              Ring = auffällig
+                              Ring = Isolation-Forest-Markierung
                             </span>
                           </div>
                           <button
@@ -1153,7 +1212,7 @@ export default function App() {
                         >
                           <span>01</span>
                           <div>
-                            <strong>Abweichungen begründen</strong>
+                            <strong>Werte und Regeln vergleichen</strong>
                             <p>
                               Messwerte mit Median, Quartilen und ähnlichen
                               Zeilen vergleichen.
@@ -1232,8 +1291,7 @@ export default function App() {
                       <div>
                         <span className="eyebrow">DEIN ANALYSEBRIEFING</span>
                         <h2>
-                          {exploration.insights.length} überprüfbare
-                          Erkenntnisse
+                          {exploration.coverage.candidates} berechnete Befunde
                         </h2>
                         <p>
                           Aus {number(exploration.count, 0)} Zeilen deiner
@@ -1251,10 +1309,20 @@ export default function App() {
                       keys={config.duplicate_keys}
                       onKeys={(duplicate_keys) => update({ duplicate_keys })}
                     />
+                    <FindingControls
+                      config={config}
+                      coverage={exploration.coverage}
+                      busy={exploring}
+                      onChange={update}
+                    />
                     <InsightFeed
                       items={exploration.insights}
                       onExplore={exploreInsight}
+                      filter={config.finding_kind}
+                      counts={exploration.coverage.kind_counts}
+                      onFilter={(finding_kind) => update({ finding_kind })}
                     />
+
                     <ResearchShelf
                       records={records}
                       onOpen={(savedId) => setInvestigation({ savedId })}
@@ -1597,27 +1665,28 @@ export default function App() {
                       </span>
                       <div>
                         <h2>
-                          {number(exploration.anomaly_count, 0)} Zeilen
-                          verdienen einen zweiten Blick.
+                          {number(exploration.anomaly_count, 0)} Zeilen sind vom
+                          Isolation Forest markiert.
                         </h2>
                         <p>
                           Isolation Forest sucht ungewöhnliche Kombinationen in{" "}
                           {analysis.features.length} Merkmalen. Die Markierung
-                          ist ein Prüfhinweis.
+                          ist das Ergebnis dieses Verfahrens und keine
+                          Fehlerbewertung.
                         </p>
                       </div>
                     </div>
                     <Card>
                       <div className="card-heading">
                         <div>
-                          <h2>Auffällige Beispiele</h2>
+                          <h2>Modellmarkierte Beispiele</h2>
                           <p>
-                            Die bis zu 30 auffälligsten Zeilen deiner aktuellen
-                            Auswahl.
+                            Bis zu 30 markierte Zeilen mit den höchsten
+                            Isolation-Forest-Scores in der aktuellen Auswahl.
                           </p>
                         </div>
                         <Badge tone="orange">
-                          Höherer Score = ungewöhnlicher
+                          Isolation-Forest-Score (absteigend)
                         </Badge>
                       </div>
                       {exploration.anomalies.length ? (
@@ -1626,8 +1695,8 @@ export default function App() {
                             <thead>
                               <tr>
                                 <th>Zeile</th>
-                                <th>Auffällige Werte</th>
-                                <th>Warum auffällig?</th>
+                                <th>Werte mit Regel-Treffer</th>
+                                <th>Einzelwertvergleich</th>
                                 <th>Score</th>
                                 <th />
                               </tr>
@@ -1995,7 +2064,7 @@ export default function App() {
             </span>
             <h2>Zeile #{inspected.id + 1}</h2>
             <Badge tone={inspected.anomaly ? "orange" : "green"}>
-              {inspected.anomaly ? "Auffällig" : "Unmarkiert"}
+              {inspected.anomaly ? "Modellmarkierung" : "Unmarkiert"}
             </Badge>
           </div>
           <div className="inspector-meta">
@@ -2059,8 +2128,8 @@ export default function App() {
             <ArrowRight size={15} />
           </button>
           <p className="small-note">
-            Der Anomaliescore beschreibt die Auffälligkeit im gesamten Datensatz
-            und ist keine Fehlerwahrscheinlichkeit.
+            Der Isolation-Forest-Score beschreibt die Modellbewertung im
+            gesamten Datensatz und ist keine Fehlerwahrscheinlichkeit.
           </p>
         </aside>
       )}
@@ -2151,10 +2220,15 @@ export default function App() {
         <ConfigDialog
           key={pending.id}
           dataset={pending}
-          initial={settingsSameDataset ? analysis?.config : undefined}
+          initial={
+            pendingInitial ??
+            (settingsSameDataset ? analysis?.config : undefined)
+          }
           busy={busy}
           onClose={closeConfig}
-          onRun={(options) => void run(pending, options)}
+          onRun={(options) =>
+            void run(pending, options, pendingRestore.current)
+          }
         />
       )}
     </div>

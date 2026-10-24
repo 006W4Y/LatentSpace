@@ -60,7 +60,7 @@ export default function DataTableView({
               <thead>
                 <tr>
                   <th>Zeile</th>
-                  <th>Status</th>
+                  <th>Isolation Forest / Einzelwertregeln</th>
                   {Object.keys(roles).map((name) => (
                     <th key={name}>{name}</th>
                   ))}
@@ -83,7 +83,7 @@ export default function DataTableView({
                     <td>
                       {row.anomaly ? (
                         <div className="row-evidence-status">
-                          <span className="badge orange">Auffällig</span>
+                          <span className="badge orange">Modellmarkierung</span>
                           <small>
                             {row.explanation
                               ? row.explanation.reasons.length

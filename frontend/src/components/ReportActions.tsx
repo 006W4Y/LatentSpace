@@ -7,7 +7,7 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import type { ExploreConfig } from "../api";
-import { download } from "../api";
+import { download, localFetch } from "../api";
 
 export default function ReportActions({
   job,
@@ -22,7 +22,7 @@ export default function ReportActions({
   async function exportReport(format: "markdown" | "json") {
     setBusy(true);
     try {
-      const response = await fetch(
+      const response = await localFetch(
         `/api/analyses/${job}/report?format=${format}`,
         {
           method: "POST",
@@ -61,7 +61,10 @@ export default function ReportActions({
       </summary>
       <div className="report-options">
         <strong>Erkenntnisse weitergeben</strong>
-        <p>Mit Vergleichswerten, Methoden, Filtern und Zeilenbezug.</p>
+        <p>
+          Exportiert die aktuelle Befundseite mit Vergleichswerten, Verfahren,
+          Filtern und Gesamtzählung.
+        </p>
         <button disabled={busy} onClick={() => void exportReport("markdown")}>
           <FileText size={17} />
           <span>
@@ -71,7 +74,7 @@ export default function ReportActions({
         <button disabled={busy} onClick={() => void exportReport("json")}>
           <FileJson size={17} />
           <span>
-            Vollständige Befunde<small>JSON · für die Weiteranalyse</small>
+            Angezeigte Befunde<small>JSON · für die Weiteranalyse</small>
           </span>
         </button>
       </div>

@@ -4,7 +4,7 @@ import time
 import numpy as np
 import pandas as pd
 import pytest
-from fastapi.testclient import TestClient
+from backend.tests.client import LocalClient as TestClient
 
 from backend.app.analysis import AnalysisRequest, ExploreRequest, analyze, explore
 from backend.app.data import import_file, load_dataset, number_series, save_dataset
@@ -41,7 +41,7 @@ def test_german_csv_and_identifiers_remain_explicit():
     assert roles == {"Kunden_ID": "identifier", "Umsatz": "number", "Datum": "date", "Ort": "category"}
     assert payload["rows"][0]["Kunden_ID"] == "001"
     assert payload["rows"][0]["Ort"] == "NA"
-    result = analyze(payload, AnalysisRequest())
+    result = analyze(payload, AnalysisRequest(display={"Datum":{"date_format":"dmy"}}))
     assert result["_frame"].loc[0, "Umsatz"] == 1234.5
     assert result["_frame"].loc[0, "Datum"].month == 2
     assert result["rows"][1]["values"]["Umsatz"] is None
@@ -134,7 +134,7 @@ def test_all_missing_and_categorical_data_can_be_explored():
 
 def test_role_override_reports_failed_conversions():
     meta = import_file(b"Datum,Wert\n2026-01-01,10\nkaputt,unbekannt\n2026-01-03,30\n", "mixed.csv")
-    result = analyze(load_dataset(meta["id"]), AnalysisRequest(roles={"Datum": "date", "Wert": "number"}))
+    result = analyze(load_dataset(meta["id"]), AnalysisRequest(roles={"Datum": "date", "Wert": "number"}, display={"Datum":{"date_format":"iso"}}))
     assert result["_frame"]["Datum"].isna().sum() == 1
     assert result["_frame"]["Wert"].isna().sum() == 1
     assert len([n for n in result["notices"] if "nicht gelesen" in n]) == 2
@@ -175,10 +175,10 @@ def test_api_import_job_explore_export_and_delete():
         assert client.post(f"/api/analyses/{job_id}/explore", json={"row_ids": [0]}).json()["count"] == 1
         csv = client.post(f"/api/analyses/{job_id}/export", json={"row_ids": [0]})
         assert csv.status_code == 200
-        assert "'=1+1" in csv.text
+        assert "\t=1+1" in csv.text
         assert "normal" not in csv.text
         empty = client.post(f"/api/analyses/{job_id}/export", json={"row_ids": []})
-        assert "Name,Wert" in empty.text
+        assert '"Name","Wert"' in empty.text
         assert client.post(f"/api/analyses/{job_id}/explore", json={"value_column": "Name"}).status_code == 422
         assert client.delete(f"/api/datasets/{dataset_id}").status_code == 204
         assert client.get(f"/api/datasets/{dataset_id}").status_code == 404

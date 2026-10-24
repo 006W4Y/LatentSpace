@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -8,8 +7,9 @@ import {
   ScanSearch,
   TrendingUp,
 } from "lucide-react";
-import type { Insight } from "../api";
+import type { Insight, ExploreConfig } from "../api";
 import { number } from "../api";
+import FindingBasis from "./FindingBasis";
 
 const families = {
   anomaly: {
@@ -27,29 +27,22 @@ const families = {
   },
 };
 
-export function variedInsights(items: Insight[], limit = 6) {
-  const chosen: Insight[] = [];
-  for (const item of items)
-    if (!chosen.some((x) => x.kind === item.kind)) chosen.push(item);
-  for (const item of items)
-    if (chosen.length < limit && !chosen.includes(item)) chosen.push(item);
-  return chosen.slice(0, limit);
-}
-
 export default function InsightFeed({
   items,
   onExplore,
   compact = false,
+  filter = "all",
+  counts,
+  onFilter,
 }: {
   items: Insight[];
   onExplore: (item: Insight) => void;
   compact?: boolean;
+  filter?: ExploreConfig["finding_kind"];
+  counts?: Partial<Record<Insight["kind"], number>>;
+  onFilter?: (kind: ExploreConfig["finding_kind"]) => void;
 }) {
-  const [filter, setFilter] = useState("all");
-  const visible =
-    compact || filter === "all"
-      ? items
-      : items.filter((item) => item.kind === filter);
+  const visible = items;
   return (
     <div className="insight-feed">
       {!compact && (
@@ -59,17 +52,27 @@ export default function InsightFeed({
         >
           <button
             className={filter === "all" ? "active" : ""}
-            onClick={() => setFilter("all")}
+            onClick={() => onFilter?.("all")}
           >
-            Alle Erkenntnisse <span>{items.length}</span>
+            Alle Befunde{" "}
+            <span>
+              {counts
+                ? Object.values(counts).reduce(
+                    (sum, value) => sum + (value ?? 0),
+                    0,
+                  )
+                : items.length}
+            </span>
           </button>
           {Object.entries(families).map(([key, family]) => {
-            const count = items.filter((item) => item.kind === key).length;
+            const count =
+              counts?.[key as Insight["kind"]] ??
+              items.filter((item) => item.kind === key).length;
             return count ? (
               <button
                 key={key}
                 className={filter === key ? "active" : ""}
-                onClick={() => setFilter(key)}
+                onClick={() => onFilter?.(key as Insight["kind"])}
               >
                 <family.icon size={14} />
                 {family.filter}
@@ -98,6 +101,26 @@ export default function InsightFeed({
               </div>
               <h3>{item.title}</h3>
               <p>{item.detail}</p>
+              <FindingBasis finding={item} compact />
+              <div className="finding-measures">
+                {Object.entries(item.metrics).map(
+                  ([key, metric]) =>
+                    metric && (
+                      <span key={key} title={metric.label}>
+                        {metric.label}:{" "}
+                        <strong>
+                          {number(
+                            key === "coverage"
+                              ? metric.value * 100
+                              : metric.value,
+                            key === "sample_size" ? 0 : 3,
+                          )}
+                          {key === "coverage" ? " %" : ""}
+                        </strong>
+                      </span>
+                    ),
+                )}
+              </div>
               <div className="discovery-evidence">
                 {item.evidence.map((entry, i) => (
                   <div key={`${entry.label}-${i}`}>
@@ -130,8 +153,8 @@ export default function InsightFeed({
           <ScanSearch size={26} />
           <h3>Keine automatischen Befunde für diese Auswahl.</h3>
           <p>
-            Ein fehlender Hinweis bedeutet nicht, dass es keine Struktur gibt.
-            Prüfe eine größere Auswahl oder andere Merkmale.
+            Für diese Kombination aus Zeilen-, Themen- und Verfahrensfilter
+            liegt kein Befund nach den verwendeten Suchregeln vor.
           </p>
         </div>
       )}

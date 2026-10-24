@@ -6,6 +6,9 @@ export type Column = {
   missing: number;
   unique: number;
   examples: Value[];
+  date_ambiguous?: boolean;
+  date_format_suggestion?: "iso" | "dmy" | "mdy" | null;
+  month_choices?: ("zero" | "one")[];
 };
 export type Dataset = {
   id: string;
@@ -75,7 +78,13 @@ export type Insight = {
   detail: string;
   evidence: { label: string; value: string }[];
   method: string;
-  priority: number;
+  result_type: "observation" | "rule" | "model";
+  procedure: string;
+  basis: FindingBasis;
+  metrics: Record<
+    "effect" | "strength" | "sample_size" | "coverage",
+    { value: number; label: string } | null
+  >;
   sample_size: number;
   scope: string;
   action: Partial<ExploreConfig> & {
@@ -97,7 +106,13 @@ export type Insight = {
   comparison_groups: Cohort[];
   reference: { id: string; count: number; label: string };
 };
+export type ColumnDisplay = {
+  date_format: "iso" | "dmy" | "mdy" | null;
+  month_base: "none" | "zero" | "one";
+  unit_label: string;
+};
 export type AnalysisConfig = {
+  display?: Record<string, ColumnDisplay>;
   roles: Record<string, Role>;
   features: string[];
   projection: "pca" | "umap";
@@ -120,6 +135,12 @@ export type Analysis = {
   versions: Record<string, string>;
 };
 export type ExploreConfig = {
+  finding_sort: "name" | "effect" | "strength" | "sample_size" | "coverage";
+  finding_direction: "asc" | "desc";
+  finding_kind: "all" | Insight["kind"];
+  finding_origin: "all" | Insight["result_type"];
+  finding_offset: number;
+  finding_limit: number;
   duplicate_keys: string[];
   query: string;
   category_column: string | null;
@@ -146,6 +167,8 @@ export type Profile = {
   q1?: number | null;
   q3?: number | null;
   observed: number;
+  unit_label: string;
+  display: ColumnDisplay;
   distribution_kind:
     | "histogram"
     | "discrete"
@@ -180,6 +203,11 @@ export type Exploration = {
     category_columns: number;
     date_columns: number;
     candidates: number;
+    matched: number;
+    shown: number;
+    offset: number;
+    kind_counts: Partial<Record<Insight["kind"], number>>;
+    origin_counts: Partial<Record<Insight["result_type"], number>>;
     displayed_limit: number;
     note: string;
   };
@@ -217,11 +245,63 @@ export type Exploration = {
   insights: Insight[];
 };
 
+let sessionToken: Promise<string> | null = null;
+async function token(): Promise<string> {
+  if (!sessionToken)
+    sessionToken = fetch("/api/session", {
+      cache: "no-store",
+      credentials: "same-origin",
+    })
+      .then(async (response) => {
+        if (!response.ok)
+          throw new Error("Der lokale Arbeitsbereich ist nicht erreichbar.");
+        const data = await response.json();
+        return data.token as string;
+      })
+      .catch((error) => {
+        sessionToken = null;
+        throw error;
+      });
+  return sessionToken;
+}
+
+export async function localFetch(
+  url: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const mutation = !["GET", "HEAD", "OPTIONS"].includes(
+    (options.method ?? "GET").toUpperCase(),
+  );
+  const headers = new Headers(options.headers);
+  if (mutation) headers.set("X-LatentSpace-Token", await token());
+  let response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: "same-origin",
+  });
+  if (mutation && response.status === 403) {
+    const error = await response
+      .clone()
+      .json()
+      .catch(() => ({}));
+    if (error.code === "LOCAL_TOKEN") {
+      sessionToken = null;
+      headers.set("X-LatentSpace-Token", await token());
+      response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: "same-origin",
+      });
+    }
+  }
+  return response;
+}
+
 export async function api<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const response = await fetch(`/api${path}`, options);
+  const response = await localFetch(`/api${path}`, options);
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(
@@ -373,4 +453,61 @@ export type Investigation = {
   notes?: string;
   saved_id?: string;
   saved_name?: string;
+  display: Partial<ColumnDisplay>;
+  review: SensitivityReview;
+};
+
+export type FindingBasis = {
+  label: string;
+  reference_rows: number;
+  dataset_rows: number;
+  complete_rows: number;
+  missing_cells: number;
+  filters: string[];
+  model_training_rows: number | null;
+  columns: {
+    name: string;
+    role: Role;
+    observed: number;
+    missing: number;
+    source_missing: number;
+    conversion_missing: number;
+    display: Partial<ColumnDisplay>;
+  }[];
+};
+export type NumericSummary = {
+  observed: number;
+  missing: number;
+  mean: number | null;
+  median: number | null;
+  q1: number | null;
+  q3: number | null;
+  std: number | null;
+};
+export type SingleExclusion = {
+  available: boolean;
+  metric: string;
+  count: number;
+  full?: number;
+  minimum?: number;
+  maximum?: number;
+  undefined?: number;
+  columns?: string[];
+  largest_changes: { row_id: number; without: number; difference: number }[];
+};
+export type SensitivityReview = {
+  reference_rows: number;
+  remaining_rows: number;
+  excluded_rows: number[];
+  column: string;
+  method: string;
+  column_comparison: { before: NumericSummary; after: NumericSummary } | null;
+  pair_comparison: {
+    columns: string[];
+    before: number | null;
+    after: number | null;
+    before_n: number;
+    after_n: number;
+  } | null;
+  single_exclusion: SingleExclusion[];
 };

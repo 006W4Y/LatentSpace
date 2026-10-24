@@ -37,7 +37,7 @@ def list_for(dataset_id):
     return [{key: value for key, value in json.loads(row[0]).items() if key != "snapshot"} for row in rows]
 
 
-def update(record_id, name=None, notes=None):
+def update(record_id, name=None, notes=None, review=None):
     with connection() as db:
         initialize(db)
         row = db.execute("SELECT payload FROM research WHERE id = ?", (record_id,)).fetchone()
@@ -48,6 +48,8 @@ def update(record_id, name=None, notes=None):
             record["name"] = name
         if notes is not None:
             record["notes"] = notes
+        if review is not None:
+            record["review"] = review
         record["updated_at"] = datetime.now(timezone.utc).isoformat()
         db.execute("UPDATE research SET payload = ? WHERE id = ?", (json.dumps(record, ensure_ascii=False, allow_nan=False), record_id))
     return record
@@ -71,9 +73,9 @@ def restore_finding(record):
     from .findings import fingerprint
     snapshot = record["snapshot"]
     payload = load_dataset(record["dataset"])
-    frame, roles, _, _ = prepare(payload, AnalysisRequest(**snapshot["analysis_config"]))
+    frame, roles, _, usable = prepare(payload, AnalysisRequest(**snapshot["analysis_config"]), legacy="display" not in snapshot["analysis_config"])
     flagged = set(snapshot.get("model_flags", []))
-    result = {"dataset_id": payload["id"], "_frame": frame, "roles": roles,
+    result = {"dataset_id": payload["id"], "_frame": frame, "roles": roles, "_decimal": payload["decimal"], "config": snapshot["analysis_config"], "features": usable,
               "rows": [{"id": i, "values": row, "anomaly": i in flagged} for i, row in enumerate(payload["rows"])]}
     if fingerprint(result) != snapshot["fingerprint"]:
         raise ValueError("Die Originalwerte stimmen nicht mehr mit dem gespeicherten Befund überein.")

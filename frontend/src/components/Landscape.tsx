@@ -320,7 +320,7 @@ export default function Landscape({
               {hover.row.cluster < 0
                 ? "Ohne Cluster"
                 : `Gruppe ${hover.row.cluster + 1}`}
-              {hover.row.anomaly ? " · auffällig" : ""}
+              {hover.row.anomaly ? " · Isolation-Forest-Markierung" : ""}
             </span>
           </div>
         )}

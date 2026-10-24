@@ -12,11 +12,11 @@ def build_report(result: dict, request: ExploreRequest) -> dict:
     exploration = explore(result, request)
     source = json.dumps([row["values"] for row in result["rows"]], ensure_ascii=False, sort_keys=True).encode()
     return {
-        "report_version": "2.0", "created_at": datetime.now(timezone.utc).isoformat(),
+        "report_version": "3.0", "app_version": "0.4.0", "created_at": datetime.now(timezone.utc).isoformat(),
         "dataset": {"id": result["dataset_id"], "name": result["name"], "rows": len(result["rows"]), "fingerprint_sha256": hashlib.sha256(source).hexdigest()},
         "selection": {"count": exploration["count"], "row_ids": exploration["filtered_ids"], "filters": request.model_dump()},
         "analysis": {"config": result["config"], "seed": result["seed"], "versions": result["versions"], "features": result["features"]},
-        "insights": exploration["insights"], "profiles": exploration["profiles"],
+        "finding_selection": exploration["coverage"], "insights": exploration["insights"], "profiles": exploration["profiles"],
         "correlations": exploration["correlations"],
         "anomaly_count": exploration["anomaly_count"], "explained_anomalies": exploration["anomalies"],
         "notices": result["notices"],
@@ -35,15 +35,15 @@ def markdown_report(report: dict) -> str:
         for char in ["\\", "`", "*", "_", "[", "]", "<", ">", "#", "|"]:
             value = value.replace(char, "\\" + char)
         return value
-    lines = ["# LatentSpace · Analysebericht", "", f"Datensatz: **{text(report['dataset']['name'])}**", f"Erstellt: {report['created_at']}", f"Auswahl: {report['selection']['count']} von {report['dataset']['rows']} Zeilen", f"Datensatz-ID: {report['dataset']['id']}", f"SHA-256 der Originalwerte: `{report['dataset']['fingerprint_sha256']}`", "", "## Erkenntnisse", ""]
+    lines = ["# LatentSpace · Analysebericht", "", f"Datensatz: **{text(report['dataset']['name'])}**", f"Erstellt: {report['created_at']}", f"Auswahl: {report['selection']['count']} von {report['dataset']['rows']} Zeilen", f"Datensatz-ID: {report['dataset']['id']}", f"SHA-256 der Originalwerte: `{report['dataset']['fingerprint_sha256']}`", "", "## Berechnete Befunde", "", f"Gefunden: {report['finding_selection']['candidates']} · nach Themen-/Verfahrensfilter: {report['finding_selection']['matched']} · in diesem Export: {report['finding_selection']['shown']}", ""]
     if not report["insights"]:
         lines.extend(["Für diese Auswahl wurden keine automatischen Befunde erzeugt.", ""])
     for insight in report["insights"]:
-        lines.extend([f"### {text(insight['title'])}", "", text(insight["detail"]), "", f"Methode: {text(insight['method'])}", f"Bezug: aktuelle Auswahl mit {insight['sample_size']} Zeilen.", f"Einordnung: {text(insight['limitation'])}"])
+        lines.extend([f"### {text(insight['title'])}", "", text(insight["detail"]), "", f"Methode: {text(insight['method'])}", f"Verfahren: {text(insight['procedure'])} · Ergebnisart: {text(insight['result_type'])}", f"Referenz: {insight['basis']['reference_rows']} von {insight['basis']['dataset_rows']} Zeilen, {insight['basis']['complete_rows']} vollständig, {insight['basis']['missing_cells']} Zellen ohne lesbaren Wert.", f"Spalten: {text(', '.join(column['name'] for column in insight['basis']['columns']))}", f"Filter: {text('; '.join(insight['basis']['filters']))}", f"Einordnung: {text(insight['limitation'])}"])
         if insight["row_ids"]:
             lines.append("Betroffene Datenzeilen (1-basiert): " + ", ".join(str(i + 1) for i in insight["row_ids"][:100]) + (" … vollständige IDs im JSON-Bericht." if len(insight["row_ids"]) > 100 else ""))
         lines.append("")
-    lines.extend(["## Auffällige Zeilen und Vergleichswerte", "", f"{report['anomaly_count']} Markierungen in der Auswahl. Die bis zu 30 höchsten Scores werden erläutert.", ""])
+    lines.extend(["## Isolation-Forest-Markierungen und Einzelwertregeln", "", f"{report['anomaly_count']} Markierungen in der Auswahl. Die bis zu 30 höchsten Scores werden erläutert.", ""])
     for row in report["explained_anomalies"]:
         explanation = row["explanation"]
         lines.extend([f"### Zeile {row['id'] + 1} · Score {row['score']:.4f}", "", text(explanation["summary"])])

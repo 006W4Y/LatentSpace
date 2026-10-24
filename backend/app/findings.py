@@ -11,6 +11,10 @@ import pandas as pd
 
 from .data import clean_json
 from .explanations import format_number
+from .observations import describe_findings
+from .sensitivity import review_comparison
+from .presentation import number_series
+from .labels import MONTHS
 
 
 def fingerprint(result):
@@ -35,7 +39,7 @@ def bind_findings(result, subset, findings, filters):
         snapshot = {"finding": finding, "reference_ids": reference_ids, "filters": filters,
                     "dataset_id": result["dataset_id"], "fingerprint": fingerprint(result),
                     "analysis_config": {**result["config"], "roles": result["roles"]}, "versions": result["versions"], "seed": result["seed"],
-                    "model_flags": model_flags}
+                    "model_flags": model_flags, "schema_version": 2, "app_version": "0.4.0", "decimal": result.get("_decimal", ".")}
         registry[token] = snapshot
         registry.move_to_end(token)
         while len(registry) > 512:
@@ -51,9 +55,17 @@ def require_finding(result, token):
     return snapshot
 
 
-def investigate(result, snapshot, mode="affected", page=0, column=None):
+def investigate(result, snapshot, mode="affected", page=0, column=None, exclude_rows=None):
     if mode not in {"affected", "comparison", "reference"} or page < 0 or page > 400:
         raise ValueError("Ungültige Vergleichsauswahl oder Seite.")
+    if "basis" not in snapshot["finding"]:
+        snapshot = copy.deepcopy(snapshot)
+        legacy = snapshot["finding"]
+        legacy.pop("priority", None)
+        describe_findings(result, result["_frame"].loc[snapshot["reference_ids"]], [legacy], snapshot["filters"])
+        legacy["title"] = f"Gespeicherter Befund: {legacy['procedure']}"
+        legacy["detail"] = "; ".join(f"{entry['label']}: {entry['value']}" for entry in legacy["evidence"])
+        legacy["limitation"] = "Gespeicherte Berechnung aus einer früheren Version; die damalige Referenz und Regel sind unverändert."
     finding = snapshot["finding"]
     frame = result["_frame"]
     reference_ids = snapshot["reference_ids"]
@@ -78,8 +90,14 @@ def investigate(result, snapshot, mode="affected", page=0, column=None):
         summaries.append({"label": label, "count": len(ids), "missing": int(source.isna().sum()),
                           "median": source.median() if numeric and source.notna().any() else None, "mean": source.mean() if numeric and source.notna().any() else None})
     reference = frame.loc[reference_ids, column]
+    display = snapshot["analysis_config"].get("display", {}).get(column, {})
     distribution = []
-    if result["roles"][column] == "number" and reference.notna().any():
+    if display.get("month_base", "none") != "none":
+        offset = 0 if display["month_base"] == "zero" else 1
+        numeric = number_series(reference, snapshot.get("decimal", ".")).dropna()
+        for code in sorted(numeric.unique()):
+            distribution.append({"label": MONTHS[int(code) - offset], **{key: int(number_series(frame.loc[ids,column], snapshot.get("decimal", ".")).eq(code).sum()) for key, (_,ids) in zip(["reference","affected","comparison"],cohorts)}})
+    elif result["roles"][column] == "number" and reference.notna().any():
         values = reference.dropna()
         edges = np.histogram_bin_edges(values, bins=min(12, max(1, values.nunique())))
         for i in range(len(edges) - 1):
@@ -113,14 +131,15 @@ def investigate(result, snapshot, mode="affected", page=0, column=None):
                        "reference_row_ids": reference_ids, "reference_count": len(reference_ids), "affected_count": len(affected_ids), "comparison_count": len(comparison_ids), "excluded_comparison_count": len(reference_ids) - len(affected_ids) - len(comparison_ids),
                        "summaries": summaries, "distribution": distribution, "comparison_groups": finding["comparison_groups"],
                        "scatter": scatter, "scatter_total": scatter_total, "scatter_columns": numeric_columns[:2],
-                       "analysis_config": snapshot["analysis_config"], "source_filters": snapshot["filters"], "fingerprint": snapshot["fingerprint"]})
+                       "analysis_config": snapshot["analysis_config"], "source_filters": snapshot["filters"], "fingerprint": snapshot["fingerprint"], "display": display, "review": review_comparison(result, snapshot, column, exclude_rows or [])})
 
 
-def finding_report(result, snapshot, notes=""):
+def finding_report(result, snapshot, notes="", review=None):
+    detail = investigate(result, snapshot, column=(review or {}).get("column"), exclude_rows=(review or {}).get("exclude_rows", []))
     ids = snapshot["finding"]["row_ids"]
-    return clean_json({"report_version": "2.0", "finding": snapshot["finding"],
+    return clean_json({"report_version": "3.0", "finding": detail["finding"],
                        "reference_row_ids": snapshot["reference_ids"], "source_filters": snapshot["filters"],
                        "fingerprint_sha256": snapshot["fingerprint"], "analysis_config": snapshot["analysis_config"],
-                       "versions": snapshot["versions"], "seed": snapshot["seed"], "notes": notes,
+                       "versions": snapshot["versions"], "seed": snapshot["seed"], "notes": notes, "notes_origin": "user", "review": detail["review"], "app_version": snapshot.get("app_version", "0.3.0"),
                        "rows": [{"source_row": i + 1, "row_id": i, "values": result["rows"][i]["values"]} for i in ids],
                        "limitation": "Die Referenz umfasst exakt die aufgeführten 0-basierten IDs. source_row ist 1-basiert. Originalwerte sind unverändert; statistische Zellbelege sind keine Modellattribution."})

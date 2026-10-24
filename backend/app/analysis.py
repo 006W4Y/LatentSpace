@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import warnings
+from typing import Literal
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from threadpoolctl import threadpool_limits
 from .data import ROLES, clean_json, date_series, number_series
 from .explanations import explain_row
 from .insights import build_profile, discover
+from .presentation import ColumnDisplay, date_hints
 
 
 class AnalysisRequest(BaseModel):
@@ -24,6 +26,7 @@ class AnalysisRequest(BaseModel):
     features: list[str] = Field(default_factory=list, max_length=40)
     projection: str = "pca"
     min_cluster_size: int = Field(default=20, ge=3, le=1000)
+    display: dict[str, ColumnDisplay] = Field(default_factory=dict)
 
 
 class ExploreRequest(BaseModel):
@@ -40,21 +43,38 @@ class ExploreRequest(BaseModel):
     aggregation: str = "mean"
     page: int = Field(default=0, ge=0, le=20000)
     explain_page: bool = False
+    finding_sort: Literal["name", "effect", "strength", "sample_size", "coverage"] = "name"
+    finding_direction: Literal["asc", "desc"] = "asc"
+    finding_kind: Literal["all", "anomaly", "trend", "group", "relation", "quality"] = "all"
+    finding_origin: Literal["all", "observation", "rule", "model"] = "all"
+    finding_offset: int = Field(default=0, ge=0, le=1_000_000)
+    finding_limit: int = Field(default=40, ge=1, le=100)
     duplicate_keys: list[str] = Field(default_factory=list, max_length=8)
 
 
-def prepare(payload: dict, request: AnalysisRequest):
+def prepare(payload: dict, request: AnalysisRequest, *, legacy=False):
     frame = pd.DataFrame(payload["rows"])
     roles = {column["name"]: column["role"] for column in payload["columns"]}
     for name, role in request.roles.items():
         if name not in roles or role not in ROLES:
             raise ValueError("Unbekannte Spalte oder ungültige Spaltenrolle.")
         roles[name] = role
+    if any(name not in roles for name in request.display):
+        raise ValueError("Darstellung enthält eine unbekannte Spalte.")
     for name, role in roles.items():
+        settings = request.display.get(name, ColumnDisplay())
         if role == "number":
             frame[name] = number_series(frame[name], payload["decimal"])
         elif role == "date":
-            frame[name] = date_series(frame[name])
+            try:
+                frame[name] = date_series(frame[name], settings.date_format, legacy=legacy)
+            except ValueError as exc:
+                raise ValueError(f"{name}: {exc}") from exc
+        if settings.month_base != "none":
+            numbers = number_series(frame[name], payload["decimal"]).dropna()
+            low = 0 if settings.month_base == "zero" else 1
+            if role not in {"number", "category"} or len(numbers) != frame[name].notna().sum() or not ((numbers == numbers.round()) & numbers.between(low, low + 11)).all():
+                raise ValueError(f"{name}: Die Werte entsprechen nicht der gewählten Monatskodierung.")
     features = request.features or [name for name, role in roles.items() if role == "number"][:40]
     if len(features) != len(set(features)) or any(name not in roles or roles[name] != "number" for name in features):
         raise ValueError("Analysemerkmale müssen eindeutige numerische Spalten sein.")
@@ -113,15 +133,22 @@ def analyze(payload: dict, request: AnalysisRequest) -> dict:
     for name, count in conversion_failures.items():
         if count > 0:
             notices.append(f"{name}: {count} Werte konnten mit der gewählten Rolle nicht gelesen werden und gelten in Analysen als fehlend.")
+    configuration = request.model_dump()
+    configuration["display"] = {}
+    for name, role in roles.items():
+        settings = request.display.get(name, ColumnDisplay()).model_dump()
+        if role == "date" and settings["date_format"] is None:
+            settings["date_format"] = date_hints(pd.Series([row[name] for row in payload["rows"]]))["date_format_suggestion"]
+        configuration["display"][name] = settings
     versions = {name: importlib.metadata.version(name) for name in ["numpy", "pandas", "scikit-learn", "umap-learn"]}
     return {
         "dataset_id": payload["id"], "name": payload["name"], "roles": roles, "features": usable,
-        "config": request.model_dump(), "seed": 42, "versions": versions,
+        "config": configuration, "seed": 42, "versions": versions,
         "projection": actual_projection, "explained_variance": explained,
         "notices": notices, "numeric_columns": numeric,
         "cluster_count": len(set(clusters.tolist()) - {-1}), "anomaly_count": int(anomaly.sum()),
         "rows": clean_json([{"id": i, "values": payload["rows"][i], "coords": coords[i].tolist(), "cluster": int(clusters[i]), "anomaly": bool(anomaly[i]), "score": float(scores[i])} for i in range(n)]),
-        "_frame": frame, "_matrix": matrix,
+        "_frame": frame, "_matrix": matrix, "_decimal": payload["decimal"],
     }
 
 
@@ -165,7 +192,7 @@ def explore(result: dict, request: ExploreRequest) -> dict:
     subset = frame.loc[mask]
     ids = subset.index.tolist()
     numeric = sorted(result["numeric_columns"])
-    profiles = [build_profile(name, roles[name], subset[name]) for name in frame.columns]
+    profiles = [build_profile(name, roles[name], subset[name], result["config"].get("display", {}).get(name), decimal=result.get("_decimal", ".")) for name in frame.columns]
     correlations = []
     if len(subset) >= 3:
         corr = subset[numeric].corr(method="pearson")
@@ -221,6 +248,8 @@ def explore(result: dict, request: ExploreRequest) -> dict:
     insights = discover(result, subset, profiles, correlations, len(anomalies), request.duplicate_keys, coverage)
     complete_keys = subset.dropna(subset=request.duplicate_keys) if request.duplicate_keys else subset.iloc[:0]
     coverage["duplicate_check"] = {"keys": request.duplicate_keys, "complete": len(complete_keys), "duplicate_rows": int(complete_keys.duplicated(subset=request.duplicate_keys, keep=False).sum()) if request.duplicate_keys else 0, "skipped": len(subset) - len(complete_keys) if request.duplicate_keys else 0}
+    from .observations import describe_findings, order_findings
+    insights = order_findings(describe_findings(result, subset, insights, request.model_dump()), request, coverage)
     from .findings import bind_findings
     insights = bind_findings(result, subset, insights, request.model_dump())
     explained_anomalies = [{**row, "explanation": explain_row(result, row["id"])} for row in anomalies[:30]]

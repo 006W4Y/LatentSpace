@@ -29,6 +29,11 @@ export default function ProfileCard({ profile }: { profile: Profile }) {
           {roleLabels[profile.role]}
         </span>
       </div>
+      {profile.unit_label && (
+        <p className="user-unit-label">
+          Label (Nutzereingabe): {profile.unit_label}
+        </p>
+      )}
       {textual ? (
         <div className="identifier-profile">
           {profile.distribution_kind === "identifier" ? (

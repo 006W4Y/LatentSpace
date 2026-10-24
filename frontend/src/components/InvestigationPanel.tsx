@@ -20,6 +20,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import FindingBasis from "./FindingBasis";
+import SensitivityPanel from "./SensitivityPanel";
 import { api, download, number, palette, post } from "../api";
 import type {
   Investigation,
@@ -50,6 +52,7 @@ export default function InvestigationPanel({
   const [data, setData] = useState<Investigation | null>(null);
   const [mode, setMode] = useState<Investigation["mode"]>("affected");
   const [page, setPage] = useState(0);
+  const [excludeRows, setExcludeRows] = useState<number[] | undefined>();
   const [column, setColumn] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -69,7 +72,7 @@ export default function InvestigationPanel({
     setError("");
     post<Investigation>(
       `${base}/investigate`,
-      { mode, page, column },
+      { mode, page, column, exclude_rows: excludeRows },
       controller.signal,
     )
       .then((result) => {
@@ -92,7 +95,7 @@ export default function InvestigationPanel({
       active = false;
       controller.abort();
     };
-  }, [base, mode, page, column]);
+  }, [base, mode, page, column, excludeRows]);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const overflow = document.body.style.overflow;
@@ -133,12 +136,23 @@ export default function InvestigationPanel({
         await api(`/research/${savedId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, notes }),
+          body: JSON.stringify({
+            name,
+            notes,
+            review: {
+              column: data?.column,
+              exclude_rows: data?.review.excluded_rows ?? [],
+            },
+          }),
         });
       else {
         const record = await post<ResearchRecord>(`${base}/save`, {
           name,
           notes,
+          review: {
+            column: data?.column,
+            exclude_rows: data?.review.excluded_rows ?? [],
+          },
         });
         setSavedId(record.id);
       }
@@ -156,7 +170,14 @@ export default function InvestigationPanel({
     try {
       const report = await post<unknown>(
         savedId ? `/research/${savedId}/report` : `${base}/report`,
-        { name, notes },
+        {
+          name,
+          notes,
+          review: {
+            column: data?.column,
+            exclude_rows: data?.review.excluded_rows ?? [],
+          },
+        },
       );
       download(
         new Blob([JSON.stringify(report, null, 2)], {
@@ -170,6 +191,7 @@ export default function InvestigationPanel({
       setSaving(false);
     }
   }
+  const activeExclusions = excludeRows ?? data?.review.excluded_rows ?? [];
   const columns = data
     ? Array.from(new Set([data.column, ...data.columns]))
     : [];
@@ -216,15 +238,12 @@ export default function InvestigationPanel({
             <>
               <h3 className="investigation-headline">{data.finding.title}</h3>
               <p>{data.finding.detail}</p>
-              <div className="reference-banner">
-                <strong>
-                  Referenz: {number(data.reference_count, 0)} Zeilen beim Finden
-                </strong>
-                <span>
-                  Gilt unabhängig von späteren Arbeitsbereich-Filtern.
-                  Auswahl-ID {data.finding.reference.id.slice(0, 8)}.
-                </span>
-              </div>
+              <FindingBasis finding={data.finding} />
+              <small>
+                Feste Auswahl-ID {data.finding.reference.id.slice(0, 8)}. Diese
+                Grundlage bleibt unabhängig von späteren Arbeitsbereich-Filtern
+                erhalten.
+              </small>
               <div className="investigation-stats">
                 {data.summaries.map((group) => (
                   <article key={group.label}>
@@ -246,6 +265,7 @@ export default function InvestigationPanel({
                   value={data.column}
                   onChange={(event) => {
                     setColumn(event.target.value);
+                    setDirty(true);
                     setPage(0);
                   }}
                 >
@@ -377,6 +397,14 @@ export default function InvestigationPanel({
                   </table>
                 </div>
               )}
+              <SensitivityPanel
+                review={data.review}
+                busy={busy}
+                onExclude={(ids) => {
+                  setExcludeRows(ids);
+                  setDirty(true);
+                }}
+              />
               <div className="finding-rules">
                 <h3>Prüfregel & Auswahlbezug</h3>
                 <p>{data.finding.method}</p>
@@ -425,8 +453,9 @@ export default function InvestigationPanel({
                 <table>
                   <thead>
                     <tr>
+                      <th>Auslassvergleich</th>
                       <th>Datenzeile</th>
-                      <th>Modell</th>
+                      <th>Isolation Forest</th>
                       {columns.map((name) => (
                         <th key={name}>{name}</th>
                       ))}
@@ -435,6 +464,28 @@ export default function InvestigationPanel({
                   <tbody>
                     {data.rows.map((row) => (
                       <tr key={row.id}>
+                        <td>
+                          <input
+                            type="checkbox"
+                            aria-label={`Zeile ${row.id + 1} im Vergleich auslassen`}
+                            checked={activeExclusions.includes(row.id)}
+                            disabled={
+                              busy ||
+                              (!activeExclusions.includes(row.id) &&
+                                activeExclusions.length >= 50)
+                            }
+                            onChange={(event) => {
+                              setExcludeRows(
+                                event.target.checked
+                                  ? [...activeExclusions, row.id]
+                                  : activeExclusions.filter(
+                                      (id) => id !== row.id,
+                                    ),
+                              );
+                              setDirty(true);
+                            }}
+                          />
+                        </td>
                         <td>#{row.id + 1}</td>
                         <td>{row.anomaly ? "Markiert" : "Unmarkiert"}</td>
                         {columns.map((name) => {
@@ -502,8 +553,9 @@ export default function InvestigationPanel({
               <div className="finding-notes">
                 <h3>Für die weitere Untersuchung festhalten</h3>
                 <label className="field">
-                  <span>Befundname</span>
+                  <span>Befundname · Nutzereingabe</span>
                   <input
+                    aria-label="Befundname"
                     maxLength={300}
                     value={name}
                     onChange={(event) => {
@@ -513,8 +565,9 @@ export default function InvestigationPanel({
                   />
                 </label>
                 <label className="field">
-                  <span>Notizen zum Befund</span>
+                  <span>Notizen zum Befund · Nutzereingabe</span>
                   <textarea
+                    aria-label="Notizen zum Befund"
                     rows={3}
                     maxLength={10000}
                     value={notes}
@@ -528,7 +581,7 @@ export default function InvestigationPanel({
                 <div className="finding-note-actions">
                   <button
                     className="button primary"
-                    disabled={saving || !name.trim()}
+                    disabled={saving || busy || !name.trim()}
                     onClick={() => void save()}
                   >
                     <Bookmark size={15} />
@@ -538,7 +591,7 @@ export default function InvestigationPanel({
                   </button>
                   <button
                     className="button secondary"
-                    disabled={saving}
+                    disabled={saving || busy}
                     onClick={() => void exportFinding()}
                   >
                     <Download size={15} />
